@@ -238,3 +238,25 @@ objects:
         protocol: UDP
       - port: 5353
         protocol: TCP
+
+# --- Mon-Fri 08:00–16:00 Europe/Prague ---
+- apiVersion: keda.sh/v1alpha1
+  kind: ScaledObject
+  metadata:
+    name: ${BOT_NAME}-cron
+    labels:
+      app.kubernetes.io/name: ${BOT_NAME}
+      app.kubernetes.io/component: bot
+      app.kubernetes.io/part-of: devbot
+  spec:
+    scaleTargetRef:
+      name: ${BOT_NAME}
+    minReplicaCount: 0
+    maxReplicaCount: 1
+    triggers:
+    - type: cron
+      metadata:
+        timezone: Europe/Prague
+        start: 0 8 * * 1-5
+        end: 0 16 * * 1-5
+        desiredReplicas: "1"
