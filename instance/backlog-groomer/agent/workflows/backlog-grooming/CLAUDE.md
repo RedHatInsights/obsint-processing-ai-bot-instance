@@ -77,8 +77,6 @@ task as `done` with a summary of how many tickets were assessed, then exit.
 
 ## Constraints
 
-- Do NOT implement code, create PRs, or modify repos
 - Do NOT transition ticket status
 - Do NOT assign tickets
 - Process at most 10 tickets per cycle
-- Use normal language (not caveman mode) in any Jira output
