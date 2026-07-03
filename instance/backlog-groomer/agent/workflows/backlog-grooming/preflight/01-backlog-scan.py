@@ -20,6 +20,7 @@ def _search_backlog():
         print("ERR: BOT_LABEL not set", file=sys.stderr)
         return []
 
+    # Basic filters — more granular filtering will be added in CCXDEV-16532
     status_list = ", ".join(f'"{s}"' for s in NOT_STARTED_STATUSES)
     jql = (
         f"labels = {BOT_LABEL} "

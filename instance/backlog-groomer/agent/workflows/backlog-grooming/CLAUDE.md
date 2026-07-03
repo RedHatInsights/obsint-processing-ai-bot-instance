@@ -21,6 +21,7 @@ If the preflight data is empty or says no tickets, signal sleep and exit.
 Read the persona prompt at `personas/backlog-grooming/prompt.md` for team
 context, then evaluate each ticket for:
 
+<!-- Basic criteria — more refined assessment rules in CCXDEV-16532 -->
 1. **Clarity** — clear enough to start work? Steps to reproduce for bugs?
 2. **Scope** — appropriately sized for one sprint? Should it be split?
 3. **Context** — can the affected repo be identified? Is there a `repo:` label?
