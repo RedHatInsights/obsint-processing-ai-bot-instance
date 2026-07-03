@@ -10,20 +10,28 @@ Each cycle, execute this sequence:
 
 ### Step 1 — Read pre-fetched Jenkins data
 
-The pre-flight script already fetched the Jenkins overview (zero token cost).
-The data is in your prompt as JSON. Do NOT run `triage_jenkins.py` again for
-the overview — that would waste tokens re-fetching the same data.
+The pre-flight script already fetched, filtered, and prioritized the Jenkins
+data (zero token cost). The data is in your prompt as JSON. It contains:
 
-Only run the script for individual build details when you need to analyze a
-specific failure:
+- **`eligible`** — jobs sorted by priority: prod-failing first, then
+  stage-failing, then healthy. Each has `_head_failing` and `_fail_count`.
+  Note: if ALL jobs are healthy, the pre-flight returns `skip` and no AI
+  session starts — so you will always have at least one failing job here.
+- **`skipped`** — jobs excluded with a reason:
+  - `disabled` — job is disabled in Jenkins, not relevant
+  - `building` — latest build still running, triage the previous completed
+    build instead on next cycle
+
+Do NOT run `triage_jenkins.py` again for the overview. Only run it for
+individual build details when you need to analyze a specific failure:
 
 ```bash
 python3 skills/triage-jenkins/triage_jenkins.py <job-name> <build-num>
 ```
 
-### Step 2 — Classify each job
+### Step 2 — Classify each eligible job
 
-For every non-disabled job, classify its pattern:
+For each job in the `eligible` list, classify its pattern:
 
 | Pattern | Definition |
 |---------|------------|
@@ -80,7 +88,11 @@ If you find a memory entry whose `error_signature` matches the current failure
 
 ### Step 5 — Send Slack messages
 
-Use `/slack-notify` to send messages. Compose TWO types of messages:
+Use `/slack-notify` to send messages. Pass the current cycle's task reference
+`scheduled:watchduty-YYYY-MM-DDTHH` (e.g., `scheduled:watchduty-2026-07-03T14`)
+so each message is associated with the tracked task.
+
+Compose TWO types of messages:
 
 #### Compact status message (always sent)
 
