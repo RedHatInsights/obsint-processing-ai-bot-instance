@@ -9,6 +9,17 @@ Single-pass grooming cycle.
 - Cycle end: `idle`, "Grooming complete. Sleeping..."
 - Error: `error`, "<what went wrong>"
 
+### Step 0: Create batch task
+
+Create a single task for the entire grooming cycle using `task_add`:
+- `title`: "Grooming batch — N tickets"
+- `external_key`: today's date as `grooming-YYYY-MM-DD`
+- `source_type`: `scheduled`
+- `status`: `in_progress`
+
+This tracks the cycle in the dashboard. Mark it `done` at the end of step 4.
+Do NOT create one task per ticket — use one batch task per cycle.
+
 ### Step 1: Read pre-fetched ticket data
 
 The preflight script already fetched backlog tickets (zero token cost).
@@ -61,7 +72,8 @@ END LIVE MODE -->
 
 ### Step 4: Signal sleep
 
-After processing all tickets (or hitting the turn budget), exit cycle.
+After processing all tickets (or hitting the turn budget), mark the batch
+task as `done` with a summary of how many tickets were assessed, then exit.
 
 ## Constraints
 
