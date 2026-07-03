@@ -7,20 +7,17 @@ as infrastructure issues or real test problems.
 
 ## Task Tracking
 
-Source: `scheduled` (defined in instance.yaml).
+Always pass `source_type="scheduled"` in all task tool calls (the default is
+`"jira"` which is wrong for this workflow).
 
-External key format: `watchduty-YYYY-MM-DDTHH` (one task per hourly cycle).
-For example: `watchduty-2026-07-03T14`.
+Task parameters for `task_add`:
+- `external_key`: the Jenkins job name (e.g., `ccx-external-data-pipeline-prod`)
+- `source_type`: `"scheduled"`
+- `repo`: the Jenkins job name (same as external_key — no git repo applies)
+- `branch`: empty string `""` (no branch applies)
 
-Use this as the task ID when reporting to the memory server so each cycle is
-tracked as a distinct task. The full task ID is `scheduled:watchduty-YYYY-MM-DDTHH`.
+## Error Dedup
 
-## Memory Convention
-
-Use the memory MCP server to track previously reported errors. Tag entries with
+Use memory to track previously reported error signatures. Tag entries with
 `watchduty:jenkins:<job-name>` and include an `error_signature` field (set of
-failing test names + error type) so subsequent cycles can detect duplicates.
-
-**Cleanup:** When a previously failing job recovers to healthy or recovering
-status, remove its memory entry. This ensures that if the same error reappears
-later it is treated as a new issue and gets a fresh description message.
+failing test names + error type). Remove when job recovers.

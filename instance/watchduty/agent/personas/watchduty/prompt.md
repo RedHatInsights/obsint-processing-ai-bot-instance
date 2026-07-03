@@ -76,21 +76,23 @@ Anything that does NOT match an infrastructure pattern above:
 - New test failures that appeared after a code change
 - Compilation or import errors
 
-### Step 4 — Check memory for previously reported errors
+### Step 4 — Check tasks and memory for previously reported errors
 
-Before composing messages, search memory for previously sent error descriptions.
-Use the memory MCP server to search for entries tagged with
-`watchduty:jenkins:<job-name>`.
+For each failing job:
 
-If you find a memory entry whose `error_signature` matches the current failure
+1. **Check tasks** — call `task_get(external_key="<job-name>",
+   source_type="scheduled")`. If a task exists, the job was already being
+   tracked.
+2. **Check memory** — search memory for an entry tagged
+   `watchduty:jenkins:<job-name>` with an `error_signature`.
+
+If a memory entry exists and its `error_signature` matches the current failure
 (same failing test names AND same error pattern), mark that job as
 **already-reported** — do NOT send a separate description message for it again.
 
 ### Step 5 — Send Slack messages
 
-Use `/slack-notify` to send messages. Pass the current cycle's task reference
-`scheduled:watchduty-YYYY-MM-DDTHH` (e.g., `scheduled:watchduty-2026-07-03T14`)
-so each message is associated with the tracked task.
+Use `/slack-notify` to send messages.
 
 Compose TWO types of messages:
 
@@ -150,17 +152,26 @@ Rules for description messages:
   description messages for real issues so the on-call IC is notified.
 - Keep the entire message under 500 characters.
 
-After sending a detailed description, **save to memory** with tag
-`watchduty:jenkins:<job-name>` and include:
-- `error_signature`: the set of failing test names + error type
-- `first_reported_build`: the build number when first reported
-- `message_summary`: one-line summary of the issue
+After sending a detailed description:
 
-### Step 6 — Clean up stale memory entries
+1. **Create/update task** — call `task_add(external_key="<job-name>",
+   source_type="scheduled", repo="<job-name>", branch="",
+   title="<short failure description>")` or `task_update` if the task
+   already exists
+2. **Save to memory** — save an entry tagged `watchduty:jenkins:<job-name>`
+   with:
+   - `error_signature`: the set of failing test names + error type
+   - `first_reported_build`: the build number when first reported
+   - `message_summary`: one-line summary of the issue
 
-If a previously reported job is now **healthy** or **recovering**, remove its
-memory entry — the issue has been resolved and future failures should be
-reported fresh.
+### Step 6 — Clean up resolved jobs
+
+If a previously reported job is now **healthy** or **recovering**:
+
+1. **Archive the task** — call `task_remove(external_key="<job-name>",
+   source_type="scheduled")`
+2. **Remove memory entry** — delete the `watchduty:jenkins:<job-name>` memory
+   entry so future re-failures are treated as new
 
 ## Guidelines
 
