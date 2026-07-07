@@ -91,9 +91,11 @@ def classify_jobs(data):
         eligible.append(job)
 
     eligible.sort(key=lambda j: j["_priority"])
-    has_failures = any(j["_head_failing"] or j["_fail_count"] > 0 for j in eligible)
 
-    return eligible, skipped, has_failures
+    failing = [j for j in eligible if j["_head_failing"] or j["_fail_count"] > 0]
+    healthy = [j["name"] for j in eligible if not j["_head_failing"] and j["_fail_count"] == 0]
+
+    return failing, healthy, skipped, len(failing) > 0
 
 
 def main():
@@ -105,8 +107,8 @@ def main():
         )
         return
 
-    eligible, skipped, has_failures = classify_jobs(data)
-    if eligible is None:
+    failing, healthy, skipped, has_failures = classify_jobs(data)
+    if failing is None:
         json.dump(
             {"status": "skip", "content": "Pre-flight: no jobs returned from Jenkins. Skipping cycle."},
             sys.stdout,
@@ -115,27 +117,21 @@ def main():
 
     if not has_failures:
         json.dump(
-            {"status": "skip", "content": f"Pre-flight: all {len(eligible)} eligible Jenkins jobs are healthy. Skipping cycle."},
+            {"status": "skip", "content": f"Pre-flight: all {len(healthy)} eligible Jenkins jobs are healthy. Skipping cycle."},
             sys.stdout,
         )
         return
 
-    failing_count = sum(1 for j in eligible if j["_head_failing"])
-    skip_reasons = ", ".join(s["reason"] for s in skipped) if skipped else ""
+    head_failing_count = sum(1 for j in failing if j["_head_failing"])
 
-    summary_parts = []
-    if skipped:
-        summary_parts.append(f"Filtered out {len(skipped)} ineligible jobs ({skip_reasons})")
-    summary_parts.append(f"{len(eligible)} eligible jobs")
-    summary_parts.append(f"{failing_count} currently failing")
-
-    header = "Pre-flight Jenkins data (filtered and prioritized). "
-    header += ". ".join(summary_parts) + ".\n"
-    header += "Jobs are sorted: prod-failing first, then stage-failing, then healthy.\n"
+    header = f"Pre-flight: {head_failing_count} currently failing, {len(failing)} with recent failures, {len(healthy)} healthy.\n"
+    header += "Only failing jobs included below — healthy jobs are omitted to save tokens.\n"
     header += "Do NOT re-run triage_jenkins.py for overview. Only fetch individual build details when analyzing a failure.\n\n"
 
     output = {
-        "eligible": eligible,
+        "failing": failing,
+        "healthy_jobs": healthy,
+        "healthy_count": len(healthy),
         "skipped": skipped,
         "errors": data.get("errors", []),
     }

@@ -11,17 +11,19 @@ database), NOT memory. Always pass `source_type="scheduled"` in all task calls.
 
 **Task lifecycle:**
 
-1. **New failure detected** → `task_add(external_key="<job-name>",
-   source_type="scheduled", repo="<job-name>", branch="")`. Analyze the
-   failure, send description message, save error signature to memory (for dedup).
-2. **Same job still failing, same error** → `task_get(external_key="<job-name>",
-   source_type="scheduled")` returns existing task, error signature in memory
-   matches. `task_update` with current cycle info. Do NOT re-analyze or send
-   another description — include in compact message as `(details sent)`.
+1. **New failure detected** → `task_add(external_key="<job-name>/<build>",
+   source_type="scheduled", repo="<job-name>", branch="")`. The build number
+   is the first failing build — it makes the key unique per failure episode.
+   Analyze the failure, send description message, save error signature to
+   memory (for dedup).
+2. **Same job still failing, same error** → find the existing task via
+   `task_list` filtered by repo, error signature in memory matches.
+   `task_update` with current cycle info. Do NOT re-analyze or send another
+   description — include in compact message as `(details sent)`.
 3. **Same job still failing, different error** → `task_update` existing task.
    Remove old memory entry, analyze the new failure, send new description,
    save new signature to memory.
-4. **Job recovered** → `task_remove(external_key="<job-name>",
+4. **Job recovered** → `task_remove(external_key="<job-name>/<build>",
    source_type="scheduled")` to archive the task. Remove memory entry so
    future re-failures are treated as new.
 

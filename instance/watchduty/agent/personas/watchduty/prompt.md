@@ -13,14 +13,15 @@ Each cycle, execute this sequence:
 The pre-flight script already fetched, filtered, and prioritized the Jenkins
 data (zero token cost). The data is in your prompt as JSON. It contains:
 
-- **`eligible`** — jobs sorted by priority: prod-failing first, then
-  stage-failing, then healthy. Each has `_head_failing` and `_fail_count`.
-  Note: if ALL jobs are healthy, the pre-flight returns `skip` and no AI
-  session starts — so you will always have at least one failing job here.
+- **`failing`** — only jobs with failures, sorted by priority: prod-failing
+  first, then stage-failing. Each has `_head_failing` and `_fail_count`.
+  Healthy jobs are excluded to save tokens.
+- **`healthy_jobs`** — list of healthy job names (no build data). Use for the
+  compact message healthy count/listing.
+- **`healthy_count`** — number of healthy jobs.
 - **`skipped`** — jobs excluded with a reason:
   - `disabled` — job is disabled in Jenkins, not relevant
-  - `building` — latest build still running, triage the previous completed
-    build instead on next cycle
+  - `building` — latest build still running, skip until next cycle
 
 Do NOT run `triage_jenkins.py` again for the overview. Only run it for
 individual build details when you need to analyze a specific failure:
@@ -31,7 +32,7 @@ python3 skills/triage-jenkins/triage_jenkins.py <job-name> <build-num>
 
 ### Step 2 — Classify each eligible job
 
-For each job in the `eligible` list, classify its pattern:
+For each job in the `failing` list, classify its pattern:
 
 | Pattern | Definition |
 |---------|------------|
@@ -154,10 +155,10 @@ Rules for description messages:
 
 After sending a detailed description:
 
-1. **Create/update task** — call `task_add(external_key="<job-name>",
+1. **Create/update task** — call `task_add(external_key="<job-name>/<build>",
    source_type="scheduled", repo="<job-name>", branch="",
-   title="<short failure description>")` or `task_update` if the task
-   already exists
+   title="<short failure description>")` where `<build>` is the first
+   failing build number. Or `task_update` if the task already exists.
 2. **Save to memory** — save an entry tagged `watchduty:jenkins:<job-name>`
    with:
    - `error_signature`: the set of failing test names + error type
@@ -168,7 +169,8 @@ After sending a detailed description:
 
 If a previously reported job is now **healthy** or **recovering**:
 
-1. **Archive the task** — call `task_remove(external_key="<job-name>",
+1. **Archive the task** — find the active task for this job via `task_list`
+   and call `task_remove(external_key="<job-name>/<build>",
    source_type="scheduled")`
 2. **Remove memory entry** — delete the `watchduty:jenkins:<job-name>` memory
    entry so future re-failures are treated as new
