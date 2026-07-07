@@ -1,0 +1,20 @@
+name: backlog-grooming
+type: workflow
+description: Jira backlog grooming — assess ticket quality, flag issues, leave feedback
+
+preflight:
+  - 01-backlog-scan.py
+
+provides:
+  claude_md: CLAUDE.md
+
+requires:
+  mcp_servers:
+    - bot-memory
+    - mcp-atlassian
+  env_vars:
+    - BOT_LABEL
+    - BOT_INSTANCE_ID
+    - BOT_JIRA_EMAIL
+  optional_env_vars:
+    - SLACK_WEBHOOK_URL
