@@ -178,7 +178,13 @@ After sending messages:
   source_type="scheduled")`. Remove the `watchduty:jenkins:<job-name>`
   memory entry so future re-failures are treated as new.
 
-### Step 7 — End cycle
+### Step 7 — Signal sleep and end cycle
+
+Write the sleep signal so the runner waits 1 hour before the next cycle:
+
+```bash
+mkdir -p data && echo '{"recommended_sleep": 3600, "reason": "watchduty hourly cycle"}' > data/cycle-sleep.json
+```
 
 Do NOT loop back; one pass per cycle.
 
