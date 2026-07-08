@@ -7,8 +7,6 @@ preflight:
 
 provides:
   claude_md: CLAUDE.md
-  skills:
-    - triage-jenkins
 
 requires:
   mcp_servers:

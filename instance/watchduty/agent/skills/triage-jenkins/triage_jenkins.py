@@ -12,15 +12,20 @@ Usage:
 
 Output is JSON to stdout.
 
-Requires: curl (shells out for SSL compatibility with corporate CAs).
+Uses Python's urllib with corporate CA support via ssl.create_default_context.
 """
 
 import argparse
 import json
 import re
-import subprocess
+import ssl
 import sys
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
+
+def _ssl_context():
+    return ssl.create_default_context(capath="/etc/pki/tls/certs/")
 
 INSTANCES = {
     "qe": {
@@ -58,33 +63,30 @@ def instance_for_job(job):
     return "qe"
 
 
-def curl_json(url, params=None, timeout=10):
-    cmd = [
-        "curl",
-        "-s",
-        "-w",
-        "\n%{http_code}",
-        "--max-time",
-        str(timeout),
-        "-G",
-        url,
-    ]
-    for p in params or []:
-        cmd += ["--data-urlencode", p]
-
-    r = subprocess.run(cmd, capture_output=True, text=True)
-    if r.returncode != 0:
-        errors.append(f"{url} curl:{r.returncode}")
+def _fetch(url, params=None, timeout=10):
+    if params:
+        encoded = "&".join(
+            f"{k}={urllib.parse.quote(v, safe='')}"
+            for p in params
+            for k, v in [p.split("=", 1)]
+        )
+        url = f"{url}?{encoded}"
+    req = urllib.request.Request(url)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout, context=_ssl_context()) as resp:
+            return resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        errors.append(f"{url} http:{e.code}")
+        return None
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        errors.append(f"{url} error:{e}")
         return None
 
-    lines = r.stdout.rsplit("\n", 1)
-    body = lines[0] if len(lines) > 1 else r.stdout
-    http_code = lines[1].strip() if len(lines) > 1 else "0"
 
-    if not http_code.startswith("2") or not body.strip():
-        errors.append(f"{url} http:{http_code}")
+def fetch_json(url, params=None, timeout=10):
+    body = _fetch(url, params, timeout)
+    if body is None:
         return None
-
     try:
         return json.loads(body)
     except json.JSONDecodeError:
@@ -92,29 +94,8 @@ def curl_json(url, params=None, timeout=10):
         return None
 
 
-def curl_text(url, timeout=15):
-    cmd = [
-        "curl",
-        "-s",
-        "-w",
-        "\n%{http_code}",
-        "--max-time",
-        str(timeout),
-        url,
-    ]
-    r = subprocess.run(cmd, capture_output=True, text=True)
-    if r.returncode != 0:
-        errors.append(f"{url} curl:{r.returncode}")
-        return None
-
-    lines = r.stdout.rsplit("\n", 1)
-    body = lines[0] if len(lines) > 1 else r.stdout
-    http_code = lines[1].strip() if len(lines) > 1 else "0"
-
-    if not http_code.startswith("2"):
-        errors.append(f"{url} http:{http_code}")
-        return None
-    return body
+def fetch_text(url, timeout=15):
+    return _fetch(url, timeout=timeout)
 
 
 def strip_class(obj):
@@ -146,7 +127,7 @@ def get_all_jobs(n_builds=7):
     all_jobs = []
     for inst_name, inst in INSTANCES.items():
         base = inst["url"] + inst["prefix"]
-        data = curl_json(f"{base}/api/json", [f"tree={tree}"])
+        data = fetch_json(f"{base}/api/json", [f"tree={tree}"])
         if not data:
             continue
         for j in data.get("jobs", []):
@@ -165,7 +146,7 @@ def get_job_builds(job, n_builds=7):
         f"lastFailedBuild[number],"
         f"builds[{fields}]{{{0},{n_builds}}}"
     )
-    data = curl_json(f"{_job_url(inst, job)}/api/json", [f"tree={tree}"])
+    data = fetch_json(f"{_job_url(inst, job)}/api/json", [f"tree={tree}"])
     if not data:
         return None
     data["instance"] = inst
@@ -179,7 +160,7 @@ def get_build_detail(job, build_num):
     base = _job_url(inst, job)
     detail = {"build": build_num, "stages": [], "failure_summary": None}
 
-    stages_data = curl_json(f"{base}/{build_num}/wfapi/describe")
+    stages_data = fetch_json(f"{base}/{build_num}/wfapi/describe")
     if stages_data:
         detail["stages"] = [
             {
@@ -190,7 +171,7 @@ def get_build_detail(job, build_num):
             for s in stages_data.get("stages", [])
         ]
 
-    log = curl_text(f"{base}/{build_num}/consoleText")
+    log = fetch_text(f"{base}/{build_num}/consoleText")
     if log:
         failed_tests = []
         counts = None
