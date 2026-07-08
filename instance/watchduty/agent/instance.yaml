@@ -1,0 +1,6 @@
+workflow: ./workflows/watchduty
+source: scheduled
+envs:
+  - slack
+claude_md:
+  strategy: append
