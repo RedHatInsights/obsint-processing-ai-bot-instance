@@ -99,60 +99,99 @@ If a memory entry exists and its `error_signature` matches the current failure
 
 ### Step 5 — Send Slack messages
 
-Use `/slack-notify` to send messages. Send any new-issue description messages
-BEFORE the compact status message so the compact message can mark those jobs
-as `(details sent)`.
+**CRITICAL: You MUST use the `/slack-notify` skill for ALL Slack messages.**
+Never call the `slack_notify` MCP tool directly — it will silently fail because
+the webhook URL is only available via the skill (which reads it from the
+bot's environment and passes it explicitly).
 
-#### Compact status message (always sent)
+Send Slack messages using this exact command:
 
-One message per cycle summarizing all jobs. Format:
+```bash
+python3 .claude/skills/slack-notify/slack_notify.py "<external_key>" "<event_type>" "<message>" 2>&1
+```
+
+- `external_key`: use `watchduty-YYYYMMDD-HH` for compact messages, or
+  `<job-name>/<build>` for per-job description messages.
+- `event_type`: use `infra_error` for all watchduty messages.
+- `message`: the formatted Slack message text.
+
+Send any new-issue description messages BEFORE the compact status message so
+the compact message can mark those jobs as `(details sent)`.
+
+#### Compact status message (always sent — via `/slack-notify` skill)
+
+One message per cycle summarizing all jobs. Send using:
+
+```bash
+python3 .claude/skills/slack-notify/slack_notify.py "watchduty-YYYYMMDD-HH" "infra_error" "<message>" 2>&1
+```
+
+Format (plain text only — no emojis, no mrkdwn, no Block Kit — the Slack
+Workflow Builder does not render them and will reject the message):
 
 ```
-🚦 CCX Jenkins Watchduty Report
+CCX Jenkins Watchduty Report
 
-✅ Healthy (12): ccx-advisor-ui-prod, ccx-advisor-ui-stage, ...
-🔄 Recovering (1): ccx-fuzzy-stage
-⚡ Isolated blip (1): ccx-external-data-pipeline-prod (#7756)
+HEALTHY (12): ccx-advisor-ui-prod, ccx-advisor-ui-stage, ...
+RECOVERING (1): ccx-fuzzy-stage
+BLIP (1): ccx-external-data-pipeline-prod (#7756)
 
-⚠️ Needs attention:
-  🔴 ccx-update-risk-backend-stage — consecutive-fail since #4742 (3 builds)
-     → Infra: OOM killed in test stage (exit code 137)
-  🟡 internal-pipeline-tests-prod — flapping (4 transitions in 7 builds)
-     → Real issue: endpoint returning 503 (details sent)
+NEEDS ATTENTION:
+  [FAIL] ccx-update-risk-backend-stage -- consecutive-fail since #4742 (3 builds)
+     Infra: OOM killed in test stage (exit code 137)
+  [WARN] internal-pipeline-tests-prod -- flapping (4 transitions in 7 builds)
+     Real issue: endpoint returning 503 (details sent)
 ```
 
 Rules for the compact message:
+- **Plain text only** — do NOT use emojis, unicode symbols, Slack mrkdwn
+  (`*bold*`, `_italic_`, `>` quotes, `:emoji:`), or Block Kit. The message
+  goes through Slack Workflow Builder which treats variable content as plain
+  text and will fail with `invalid_blocks` on special formatting.
+- Use UPPERCASE labels: `HEALTHY`, `RECOVERING`, `BLIP`, `NEEDS ATTENTION`,
+  `[FAIL]`, `[WARN]`
+- Use `--` instead of `—` (em dash), plain URLs without angle brackets
 - Group healthy/recovering/blip jobs on one line each (just names,
   comma-separated)
 - For failing jobs: show job name, pattern, build range, and a one-line cause
-- If the cause is infrastructure, prefix with `→ Infra:`
-- If the cause is a real issue, prefix with `→ Real issue:`
+- If the cause is infrastructure, prefix with `Infra:`
+- If the cause is a real issue, prefix with `Real issue:`
 - If a description message was sent this cycle or in a previous cycle (found
   in memory), append `(details sent)` — do not repeat the error description
   in the compact message
 - Keep the entire message under 2000 characters
 
-#### Detailed description message (only for NEW real issues)
+#### Detailed description message (only for NEW real issues — via `/slack-notify` skill)
 
 For each job with a **real test issue** that has NOT been previously reported,
-send a separate message. Keep it short — the watchduty person will open the
-link to see full details. Focus only on the actual error and a plain-language
-guess at the cause:
+send a separate message via the skill:
+
+```bash
+python3 .claude/skills/slack-notify/slack_notify.py "<job-name>/<build>" "infra_error" "<message>" 2>&1
+```
+
+Keep it short — the watchduty person will open the link to see full details.
+Focus only on the actual error and a plain-language guess at the cause.
+Use plain text only (no emojis, no mrkdwn, no Block Kit):
 
 ```
-🔍 New failure: ccx-update-risk-backend-stage (since #4742, 3 builds)
+NEW FAILURE: ccx-update-risk-backend-stage (since #4742, 3 builds)
 cc @ccx-processing-ic
 
 Error: endpoint returning 503 instead of 200
-> AssertionError: assert response.status_code == 200 (got 503)
+  AssertionError: assert response.status_code == 200 (got 503)
 Likely cause: upstream service down or schema changed after a deployment
 
-🔗 https://jenkins-csb-insights-qe-main.dno.corp.redhat.com/job/ccx/job/ccx-update-risk-backend-stage/4744/
+Link: https://jenkins-csb-insights-qe-main.dno.corp.redhat.com/job/ccx/job/ccx-update-risk-backend-stage/4744/
 ```
 
 Rules for description messages:
+- **Plain text only** — no emojis, no mrkdwn (`*`, `_`, `>`, `:emoji:`), no
+  Block Kit. Use `Link:` prefix for URLs instead of angle brackets or
+  emoji link markers.
 - **Include the key error line(s)** — quote the specific error/assertion from
-  the log (1-3 lines max), so the reader sees what broke at a glance.
+  the log (1-3 lines max, indented with spaces), so the reader sees what
+  broke at a glance.
 - **One-line likely cause** — in simple words, what might be behind it.
 - **One build link** — the most recent failed build. That's enough to start
   investigating.
@@ -213,6 +252,10 @@ Do NOT loop back; one pass per cycle.
 
 ## Important Rules
 
+- **NEVER call the `slack_notify` MCP tool directly.** Always use the
+  `/slack-notify` skill via `python3 .claude/skills/slack-notify/slack_notify.py`.
+  Direct MCP calls will silently fail (webhook URL not available to the
+  memory-server).
 - Each cycle is independent. Do not assume state from previous cycles beyond
   what is stored in tasks (progress) and memory (error signatures).
 - Keep token usage low — the triage_jenkins.py script does the data fetching;
