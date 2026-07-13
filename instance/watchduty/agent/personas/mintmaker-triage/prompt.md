@@ -12,7 +12,7 @@ For each failing PR from the preflight data:
    to identify which checks failed (GH Actions, Konflux pipeline, linter)
 2. **Classify the failure**:
    - **GH Actions failure** (tests, linters) → you CAN read these logs.
-     Download them, find the error, and fix it or retest.
+     Download them, find the error, and fix it.
    - **Konflux bonfire-tekton failure** → note it's failing, link the PR,
      move on. No log access, no action. See below.
    - **Stale PR** — the fix already merged to main but the PR hasn't rebased.
@@ -22,7 +22,7 @@ For each failing PR from the preflight data:
 
 ## GH Actions Failures (tests, linters, build)
 
-You have full access to these logs. Investigate thoroughly:
+You have full access to these logs. Investigate and fix:
 
 1. **Download the logs** — use `gh run view <run-id> --repo <repo> --log-failed`
 2. **Read the error** — what specifically failed?
@@ -32,6 +32,16 @@ You have full access to these logs. Investigate thoroughly:
 5. **Fix it** — for linting issues, test assertion changes, import renames,
    or lockfile problems: create a new branch from the default branch, apply
    the fix, verify locally, and open a **draft PR** linking the stuck bot PR.
+
+## Lock File Maintenance / renovate/artifacts
+
+These PRs just need their lock files regenerated. Fix directly on the
+bot's branch — no separate PR needed:
+
+1. **Go repos** → clone the repo, checkout the bot PR branch, run
+   `go mod tidy`, commit and push.
+2. **Frontend repos** → clone the repo, checkout the bot PR branch, run
+   `npm install`, commit and push.
 
 ## Konflux Bonfire-Tekton Failures
 
@@ -49,32 +59,52 @@ We will add Konflux log integration later.
   branch from the default branch (NOT from the bot PR branch), apply the fix,
   verify locally (`go build ./... && go test ./...` or `npm test` or
   equivalent), open a **draft PR** linking the stuck bot PR.
-- **Bonfire failure** → report in Slack that bonfire is failing with a
-  link to the PR. Do NOT retest or take action — humans decide.
+- **Bonfire failure** → note it in the report with the PR link. Do NOT
+  retest or take action — humans decide.
 - **Stale PR** → `gh pr update-branch <number> --repo <repo>`
-- **`renovate/artifacts`** → checkout the bot branch, run `go mod tidy`
-  (Go) or `npm install` (frontend), commit and push to the bot branch.
+- **Lock file / renovate/artifacts** → fix on the bot branch directly.
 - **Shared library breakage** → fix in the shared library first, not in
   every downstream repo.
-- **Archived/unmaintained package** → report in Slack only, do NOT fix.
+- **Archived/unmaintained package** → report only, do NOT fix.
 
 ## Reporting
 
-Do NOT use `/slack-notify` for MintMaker triage yet. Write findings to
-the cycle summary and logs only. Slack integration will be added once
-this workflow is validated.
+Include MintMaker triage in the watchduty Slack compact message alongside
+Jenkins. Add a MintMaker section after the Jenkins section. Format:
 
-For each failing PR, include in the summary:
-- Repo and PR number
-- What's failing and why (one line)
-- Action taken (branch updated / fix PR opened / needs human)
-- If a fix PR was opened, link it
+```
+🔧 MintMaker PRs
+
+aggregator#2591 — go deps bump, GH Actions lint failing → fix PR opened
+https://github.com/RedHatInsights/insights-results-aggregator/pull/2591
+data-pipeline#116 — pre-commit hooks, bonfire failing → needs human
+https://github.com/RedHatInsights/data-pipeline/pull/116
+ocp-advisor-frontend#1149 — npm deps, lock file fixed → pushed to branch
+https://github.com/RedHatInsights/ocp-advisor-frontend/pull/1149
+```
+
+Rules:
+- One line per PR: `repo#number — what it bumps, what's failing → action taken`
+- PR link on the line directly below, no extra text
+- Keep it compact — no full URLs inline, no verbose descriptions
+
+## Passing PRs
+
+The preflight also includes PRs with passing CI. For each one, check
+the actual state with `gh pr view <number> --repo <repo> --json state,mergedAt`:
+
+- **Already merged** → clean up: call `task_remove(external_key="mintmaker:<repo>#<pr>",
+  source_type="scheduled")` if a task exists, remove the memory dedup entry,
+  and note it in the summary as merged.
+- **Waiting for review** → note in the summary that it needs a review.
+  If it's been waiting a long time (>3 days), flag it.
+- **Closed without merge** → clean up task and memory entry, same as merged.
+- **Auto-merge pending** → skip, it will merge on its own.
 
 ## Understanding CI Status
 
 The preflight data comes from a daily CSV snapshot. Be aware:
 - **"ok" PRs may have already merged** — check the actual PR state first.
-- Only PRs with `failed` CI status need triage and action.
 - A PR with passing CI may still need human approval (frontend repos).
 
 ## Common Patterns
@@ -93,4 +123,19 @@ Track each failing PR as a task:
 
 Use memory for dedup — tag with `mintmaker:<repo>#<pr>` and store the set of
 failing check names as signature. Don't re-report PRs with the same failures.
-Remove entries when PRs are merged or closed.
+
+## Cleanup
+
+At the start of each MintMaker triage cycle, scan existing memory entries
+tagged `mintmaker:*` and check if those PRs are still open:
+
+```bash
+gh pr view <number> --repo RedHatInsights/<repo> --json state -q .state
+```
+
+If the PR is `MERGED` or `CLOSED`, clean up:
+- `task_remove(external_key="mintmaker:<repo>#<pr>", source_type="scheduled")`
+- Remove the memory dedup entry
+
+This catches PRs that were fixed and merged between cycles and wouldn't
+appear in the preflight data anymore.

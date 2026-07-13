@@ -63,16 +63,15 @@ def _fetch_csv():
         return None
 
 
-def _parse_failing_prs(csv_text):
-    """Parse CSV for failing bot PRs."""
-    failing = []
+def _parse_bot_prs(csv_text):
+    """Parse CSV for all open bot PRs (failing and passing)."""
+    bot_prs = []
     reader = csv.DictReader(io.StringIO(csv_text))
     for row in reader:
         author = row.get("author", "")
-        ci_status = row.get("ci_status", "")
-        if author in BOT_AUTHORS and ci_status == "failed":
-            failing.append(row)
-    return failing
+        if author in BOT_AUTHORS:
+            bot_prs.append(row)
+    return bot_prs
 
 
 def _format_pr(pr):
@@ -97,21 +96,33 @@ def main():
         print(json.dumps({"status": "skip", "content": "Could not fetch PR CSV report"}))
         return
 
-    failing = _parse_failing_prs(csv_text)
+    bot_prs = _parse_bot_prs(csv_text)
     _save_run_time()
 
-    if not failing:
-        print(json.dumps({"status": "skip", "content": "No failing MintMaker/Konflux PRs in daily report"}))
+    if not bot_prs:
+        print(json.dumps({"status": "skip", "content": "No open MintMaker/Konflux PRs in daily report"}))
         return
 
-    lines = [f"## MintMaker PR Triage — {len(failing)} PR(s) with failing CI", ""]
-    lines.append("Source: processing-tools daily CSV report (generated 4AM UTC)")
-    lines.append("")
-    for pr in failing:
-        lines.append(_format_pr(pr))
-        lines.append("")
+    failing = [pr for pr in bot_prs if pr.get("ci_status") == "failed"]
+    passing = [pr for pr in bot_prs if pr.get("ci_status") != "failed"]
 
-    print(f"Found {len(failing)} failing bot PRs", file=sys.stderr)
+    lines = [f"## MintMaker PR Triage — {len(bot_prs)} open PR(s) ({len(failing)} failing, {len(passing)} passing)", ""]
+    lines.append("Source: processing-tools daily CSV report (generated 4AM UTC)")
+
+    if failing:
+        lines.append("")
+        lines.append("### Failing CI")
+        for pr in failing:
+            lines.append(_format_pr(pr))
+            lines.append("")
+
+    if passing:
+        lines.append("### Passing CI (may need review or already merged)")
+        for pr in passing:
+            lines.append(_format_pr(pr))
+            lines.append("")
+
+    print(f"Found {len(bot_prs)} bot PRs ({len(failing)} failing, {len(passing)} passing)", file=sys.stderr)
     print(json.dumps({"status": "start", "content": "\n".join(lines)}))
 
 
