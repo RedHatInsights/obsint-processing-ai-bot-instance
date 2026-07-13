@@ -53,7 +53,7 @@ def fetch_jenkins_data():
 def classify_jobs(data):
     jobs = data.get("jobs", [])
     if not jobs:
-        return None, None, False
+        return None, None, None, False
 
     eligible = []
     skipped = []
