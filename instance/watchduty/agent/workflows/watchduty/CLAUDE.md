@@ -99,13 +99,34 @@ If a memory entry exists and its `error_signature` matches the current failure
 
 ### Step 5 — Send Slack messages
 
-Use `/slack-notify` to send messages. Send any new-issue description messages
-BEFORE the compact status message so the compact message can mark those jobs
-as `(details sent)`.
+**CRITICAL: You MUST use the `/slack-notify` skill for ALL Slack messages.**
+Never call the `slack_notify` MCP tool directly — it will silently fail because
+the webhook URL is only available via the skill (which reads it from the
+bot's environment and passes it explicitly).
 
-#### Compact status message (always sent)
+Send Slack messages using this exact command:
 
-One message per cycle summarizing all jobs. Format:
+```bash
+python3 .claude/skills/slack-notify/slack_notify.py "<external_key>" "<event_type>" "<message>" 2>&1
+```
+
+- `external_key`: use `watchduty-YYYYMMDD-HH` for compact messages, or
+  `<job-name>/<build>` for per-job description messages.
+- `event_type`: use `infra_error` for all watchduty messages.
+- `message`: the formatted Slack message text.
+
+Send any new-issue description messages BEFORE the compact status message so
+the compact message can mark those jobs as `(details sent)`.
+
+#### Compact status message (always sent — via `/slack-notify` skill)
+
+One message per cycle summarizing all jobs. Send using:
+
+```bash
+python3 .claude/skills/slack-notify/slack_notify.py "watchduty-YYYYMMDD-HH" "infra_error" "<message>" 2>&1
+```
+
+Format:
 
 ```
 🚦 CCX Jenkins Watchduty Report
@@ -132,12 +153,17 @@ Rules for the compact message:
   in the compact message
 - Keep the entire message under 2000 characters
 
-#### Detailed description message (only for NEW real issues)
+#### Detailed description message (only for NEW real issues — via `/slack-notify` skill)
 
 For each job with a **real test issue** that has NOT been previously reported,
-send a separate message. Keep it short — the watchduty person will open the
-link to see full details. Focus only on the actual error and a plain-language
-guess at the cause:
+send a separate message via the skill:
+
+```bash
+python3 .claude/skills/slack-notify/slack_notify.py "<job-name>/<build>" "infra_error" "<message>" 2>&1
+```
+
+Keep it short — the watchduty person will open the link to see full details.
+Focus only on the actual error and a plain-language guess at the cause:
 
 ```
 🔍 New failure: ccx-update-risk-backend-stage (since #4742, 3 builds)
@@ -213,6 +239,10 @@ Do NOT loop back; one pass per cycle.
 
 ## Important Rules
 
+- **NEVER call the `slack_notify` MCP tool directly.** Always use the
+  `/slack-notify` skill via `python3 .claude/skills/slack-notify/slack_notify.py`.
+  Direct MCP calls will silently fail (webhook URL not available to the
+  memory-server).
 - Each cycle is independent. Do not assume state from previous cycles beyond
   what is stored in tasks (progress) and memory (error signatures).
 - Keep token usage low — the triage_jenkins.py script does the data fetching;
