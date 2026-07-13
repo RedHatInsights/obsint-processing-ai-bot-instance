@@ -1,4 +1,4 @@
-workflow: backlog-grooming
+workflow: ./workflows/backlog-grooming
 source: scheduled
 envs: []
 claude_md:
