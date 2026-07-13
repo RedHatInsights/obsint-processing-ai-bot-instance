@@ -1,4 +1,4 @@
-workflow: watchduty
+workflow: ./workflows/watchduty
 source: scheduled
 envs:
   - slack
