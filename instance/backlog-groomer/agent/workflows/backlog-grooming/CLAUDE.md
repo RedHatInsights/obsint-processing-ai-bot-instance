@@ -1,5 +1,19 @@
 Backlog grooming bot. Assess Jira backlog ticket quality each cycle.
 
+<!-- TESTING / DRY-RUN LIMITATIONS:
+  - Runs once per KEDA window then sleeps (one-and-done) to limit cost during testing
+  - DRY-RUN mode: does NOT post comments or add labels to Jira
+  - Because ai-groomed labels are never added, the preflight will re-fetch
+    the same tickets each week. The bot must check memory for previously
+    groomed tickets and skip them (see step 1).
+  - Remove this block and switch to LIVE MODE in step 3 when ready for production.
+-->
+
+**ONE-AND-DONE**: Run exactly one grooming pass per KEDA window. After
+completing step 4, write `data/cycle-sleep.json` with
+`{"recommended_sleep": 7200, "reason": "grooming_complete"}` to prevent
+the runner from starting another cycle.
+
 ## Workflow
 
 Single-pass grooming cycle.
@@ -9,9 +23,16 @@ Single-pass grooming cycle.
 - Cycle end: `idle`, "Grooming complete. Sleeping..."
 - Error: `error`, "<what went wrong>"
 
-### Step 0: Create batch task
+### Step 0: Create batch task (or detect prior run)
 
-Create a single task for the entire grooming cycle using `task_add`:
+First, check if today's grooming already ran: call `task_get` with
+`external_key`: `grooming-YYYY-MM-DD`, `source_type`: `scheduled`.
+If it exists and status is `done`, write `data/cycle-sleep.json` with
+`{"recommended_sleep": 7200, "reason": "already_groomed_today"}` and exit.
+If it exists and status is `in_progress`, resume from where it left off
+(check `metadata.last_step`).
+
+Otherwise create a new task using `task_add`:
 - `title`: "Grooming batch — N tickets"
 - `external_key`: today's date as `grooming-YYYY-MM-DD`
 - `source_type`: `scheduled`
@@ -22,13 +43,20 @@ Then `task_update` with `summary`: "Starting grooming cycle — N tickets", `met
 This tracks the cycle in the dashboard.
 Do NOT create one task per ticket — use one batch task per cycle.
 
-### Step 1: Read pre-fetched ticket data
+### Step 1: Read pre-fetched ticket data and filter duplicates
 
 The preflight script already fetched backlog tickets (zero token cost).
 The data is in your prompt. Do NOT call `jira_search` again.
 
-If the preflight data is empty or says no tickets, mark the batch task
-`done` with `summary`: "No tickets to groom", then signal sleep and exit.
+**Skip already-groomed tickets**: call `memory_search` with query
+"groomed tickets" to find prior grooming memories. Filter out any ticket
+keys that appear in previous grooming results. Only assess tickets not
+seen before.
+
+If no new tickets remain (all were previously groomed, or preflight
+returned empty), mark the batch task `done` with `summary`:
+"No new tickets to groom", write `data/cycle-sleep.json` with
+`{"recommended_sleep": 7200, "reason": "no_new_tickets"}`, and exit.
 
 ### Step 2: Assess each ticket
 
@@ -41,6 +69,14 @@ context, then evaluate each ticket for:
 3. **Context** — can the affected repo be identified? Is there a `repo:` label?
 4. **Priority** — is it set (not "Undefined")?
 5. **Staleness** — older than 6 months with no activity?
+6. **Epic health** — the preflight includes parent/epic info. If the epic is
+   closed (Done, Closed, or resolution like Duplicate/Won't Do), recommend
+   closing the child task too with the reason (e.g. "Epic CCXDEV-XXXXX closed
+   as Duplicate").
+7. **Quarter planning** — the preflight includes targetQuarter and fixVersions.
+   When recommending "Ready for sprint", note whether the ticket is planned for
+   the current quarter. If it has no quarter and no fixVersion, flag it as
+   "Ready but unplanned — needs quarter assignment".
 
 Every 3 tickets (or after the last one), call `task_update` with
 `summary`: "Assessed M/N tickets", `metadata`: `{"last_step": "assessing_tickets", "tickets_assessed": M}`.
@@ -90,13 +126,17 @@ END LIVE MODE -->
 
 ### Step 4: Wrap up
 
-Three calls, all required:
+Five calls, all required:
 
 1. `task_update` with `status: done`, `summary`: keep the per-ticket results from step 3 (do NOT replace with a generic count),
    `metadata`: `{"last_step": "grooming_complete", "tickets_assessed": N}`
 2. `progress_store` with `task_id`: batch task ID, `instance_id`: your instance ID,
    `cycle_type`: `task_work`, `progress`: `{"last_step": "grooming_complete", "summary": "<first 200 chars of summary>", "tickets_assessed": N}`
-3. `bot_status_update` with `state: idle`, message: "Grooming complete. Sleeping..."
+3. `memory_store` with content: "Groomed tickets on YYYY-MM-DD: CCXDEV-111, CCXDEV-222, ..."
+   and tags: `["grooming", "groomed-tickets"]`. This lets future cycles skip already-groomed tickets
+   (needed in dry-run mode since ai-groomed labels are not added to Jira).
+4. `bot_status_update` with `state: idle`, message: "Grooming complete. Sleeping..."
+5. Write `data/cycle-sleep.json` with `{"recommended_sleep": 7200, "reason": "grooming_complete"}`
 
 Do NOT skip `status: done` on `task_update` — without it the dashboard shows the task stuck as in-progress.
 

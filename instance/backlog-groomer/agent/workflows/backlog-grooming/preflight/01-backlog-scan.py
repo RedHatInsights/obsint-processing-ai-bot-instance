@@ -37,7 +37,7 @@ def _search_backlog():
         {
             "jql": jql,
             "limit": 10,
-            "fields": "summary,status,labels,priority,description,comment,issuetype,created,updated",
+            "fields": "summary,status,labels,priority,description,comment,issuetype,created,updated,parent,customfield_12311140,fixVersions",
         },
     )
     if not data:
@@ -57,6 +57,19 @@ def _format_ticket(issue):
     lines = [f"{issue['key']} [{status.get('name', '?')}] priority={priority.get('name', '?')} type={issue_type.get('name', '?')}"]
     lines.append(f"  title: {fields.get('summary', '')}")
     lines.append(f"  created: {created} | updated: {updated}")
+
+    parent = fields.get("parent")
+    if parent:
+        p_status = parent.get("fields", {}).get("status", {}).get("name", "?")
+        lines.append(f"  epic: {parent.get('key', '?')} [{p_status}] — {parent.get('fields', {}).get('summary', '')}")
+
+    fix_versions = fields.get("fixVersions") or []
+    if fix_versions:
+        lines.append(f"  fixVersions: {', '.join(v.get('name', '?') for v in fix_versions)}")
+
+    target_quarter = fields.get("customfield_12311140")
+    if target_quarter:
+        lines.append(f"  targetQuarter: {target_quarter}")
 
     repo_labels = [l for l in labels if l.startswith("repo:")]
     other_labels = [l for l in labels if not l.startswith("repo:") and l != BOT_LABEL]
