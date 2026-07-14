@@ -5,13 +5,18 @@ Returns start if ungroomed tickets exist, skip otherwise.
 Saves tokens by fetching ticket data here instead of in the Claude session.
 """
 
+import json
 import os
 import sys
+from datetime import datetime
+from pathlib import Path
 
 from common import INSTANCE_ID, output_result
 from jira_mcp import jira_call, jira_cleanup
 
 BOT_LABEL = os.environ.get("BOT_LABEL", "")
+SCRIPT_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent
+GROOMED_MARKER = SCRIPT_DIR / "data" / "groomed-hours.json"
 NOT_STARTED_STATUSES = ("New", "Backlog", "Refinement", "To Do")
 
 
@@ -37,7 +42,7 @@ def _search_backlog():
         {
             "jql": jql,
             "limit": 10,
-            "fields": "summary,status,labels,priority,description,comment,issuetype,created,updated",
+            "fields": "summary,status,labels,priority,description,comment,issuetype,created,updated,parent,customfield_12311140,fixVersions",
         },
     )
     if not data:
@@ -57,6 +62,19 @@ def _format_ticket(issue):
     lines = [f"{issue['key']} [{status.get('name', '?')}] priority={priority.get('name', '?')} type={issue_type.get('name', '?')}"]
     lines.append(f"  title: {fields.get('summary', '')}")
     lines.append(f"  created: {created} | updated: {updated}")
+
+    parent = fields.get("parent")
+    if parent:
+        p_status = parent.get("fields", {}).get("status", {}).get("name", "?")
+        lines.append(f"  epic: {parent.get('key', '?')} [{p_status}] — {parent.get('fields', {}).get('summary', '')}")
+
+    fix_versions = fields.get("fixVersions") or []
+    if fix_versions:
+        lines.append(f"  fixVersions: {', '.join(v.get('name', '?') for v in fix_versions)}")
+
+    target_quarter = fields.get("customfield_12311140")
+    if target_quarter:
+        lines.append(f"  targetQuarter: {target_quarter}")
 
     repo_labels = [l for l in labels if l.startswith("repo:")]
     other_labels = [l for l in labels if not l.startswith("repo:") and l != BOT_LABEL]
@@ -91,9 +109,41 @@ def _format_ticket(issue):
     return "\n".join(lines)
 
 
+def _already_groomed_this_hour():
+    """Check if we already groomed in the current hour (prevents re-runs)."""
+    hour_key = datetime.utcnow().strftime("%Y-%m-%d-%H")
+    try:
+        if GROOMED_MARKER.exists():
+            done = json.loads(GROOMED_MARKER.read_text())
+            if hour_key in done:
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _mark_groomed():
+    """Mark the current hour as groomed."""
+    hour_key = datetime.utcnow().strftime("%Y-%m-%d-%H")
+    done = {}
+    try:
+        if GROOMED_MARKER.exists():
+            done = json.loads(GROOMED_MARKER.read_text())
+    except Exception:
+        pass
+    done[hour_key] = True
+    GROOMED_MARKER.parent.mkdir(parents=True, exist_ok=True)
+    GROOMED_MARKER.write_text(json.dumps(done))
+
+
 def main():
     if not INSTANCE_ID:
         output_result("error", "BOT_INSTANCE_ID not set")
+        return
+
+    if _already_groomed_this_hour():
+        print("Already groomed this hour — skipping", file=sys.stderr)
+        output_result("skip", "Already groomed this hour")
         return
 
     print(f"Scanning backlog for label={BOT_LABEL}...", file=sys.stderr)
@@ -103,6 +153,8 @@ def main():
     if not tickets:
         output_result("skip", "No ungroomed backlog tickets")
         return
+
+    _mark_groomed()
 
     lines = [f"## Backlog Grooming — {len(tickets)} ticket(s) to assess", ""]
     for t in tickets:
