@@ -17,9 +17,7 @@ Create a single task for the entire grooming cycle using `task_add`:
 - `source_type`: `scheduled`
 - `status`: `in_progress`
 
-Then `task_update` with `summary`: "Starting grooming cycle — N tickets", `metadata`: `{"last_step": "starting", "next_step": "assessing_tickets"}`.
-
-This tracks the cycle in the dashboard.
+This tracks the cycle in the dashboard. Mark it `done` at the end of step 4.
 Do NOT create one task per ticket — use one batch task per cycle.
 
 ### Step 1: Read pre-fetched ticket data
@@ -27,8 +25,7 @@ Do NOT create one task per ticket — use one batch task per cycle.
 The preflight script already fetched backlog tickets (zero token cost).
 The data is in your prompt. Do NOT call `jira_search` again.
 
-If the preflight data is empty or says no tickets, mark the batch task
-`done` with `summary`: "No tickets to groom", then signal sleep and exit.
+If the preflight data is empty or says no tickets, signal sleep and exit.
 
 ### Step 2: Assess each ticket
 
@@ -41,12 +38,6 @@ context, then evaluate each ticket for:
 3. **Context** — can the affected repo be identified? Is there a `repo:` label?
 4. **Priority** — is it set (not "Undefined")?
 5. **Staleness** — older than 6 months with no activity?
-
-Every 3 tickets (or after the last one), call `task_update` with
-`summary`: "Assessed M/N tickets", `metadata`: `{"last_step": "assessing_tickets", "tickets_assessed": M}`.
-
-If an error occurs, call `task_update` with `paused_reason`: "<what went wrong>"
-— do NOT set `status: done`, leave as `in_progress` so the dashboard shows it's stuck.
 
 ### Step 3: Report results (DRY-RUN MODE)
 
@@ -67,9 +58,6 @@ For each ticket, print:
 
 Do NOT call `jira_add_comment` or `jira_update_issue`.
 
-After the report, call `task_update` with `summary`: "Report complete",
-`metadata`: `{"last_step": "report_complete", "next_step": "grooming_complete"}`.
-
 <!-- LIVE MODE — delete the DRY-RUN block above and uncomment this to go live:
 
 For each ticket, post a Jira comment using `jira_add_comment` with the
@@ -82,17 +70,10 @@ Then add `ai-groomed` label via `jira_update_issue`.
 
 END LIVE MODE -->
 
-### Step 4: Wrap up
+### Step 4: Signal sleep
 
-Three calls, all required:
-
-1. `task_update` with `status: done`, `summary`: "Assessed N tickets — X ready, Y need refinement",
-   `metadata`: `{"last_step": "grooming_complete", "tickets_assessed": N}`
-2. `progress_store` with `task_id`: batch task ID, `instance_id`: your instance ID,
-   `cycle_type`: `task_work`, `progress`: `{"last_step": "grooming_complete", "summary": "<same>", "tickets_assessed": N}`
-3. `bot_status_update` with `state: idle`, message: "Grooming complete. Sleeping..."
-
-Do NOT skip `status: done` on `task_update` — without it the dashboard shows the task stuck as in-progress.
+After processing all tickets (or hitting the turn budget), mark the batch
+task as `done` with a summary of how many tickets were assessed, then exit.
 
 ## Constraints
 
