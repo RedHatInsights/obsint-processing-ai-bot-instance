@@ -38,13 +38,23 @@ sequence:
 ### Step 1 — Read pre-fetched Jenkins data
 
 The pre-flight script already fetched, filtered, and prioritized the Jenkins
-data (zero token cost). The data is in your prompt as JSON. It contains:
+data (zero token cost). It also checked tracked tasks — if ALL failing jobs
+are already tracked, the preflight sends a compact Slack message directly
+(zero tokens) and skips the AI session. You only run when there are NEW
+failures to analyze.
 
-- **`failing`** — only jobs with failures, sorted by priority: prod-failing
-  first, then stage-failing. Each has `_head_failing` and `_fail_count`.
-  Healthy jobs are excluded to save tokens.
-- **`healthy_jobs`** — list of healthy job names (no build data). Use for the
-  compact message healthy count/listing.
+The data is in your prompt as JSON. It contains:
+
+- **`failing`** — only NEW failing jobs (not yet tracked as tasks), with full
+  build data for analysis. Only these need detailed classification.
+- **`tracked_failing_jobs`** — names only of jobs that are still failing but
+  already tracked as tasks. Include in the compact message but do NOT
+  re-analyze. Add `(tracked)` suffix.
+- **`tracked_failing_count`** — number of already-tracked failing jobs.
+- **`recovering_jobs`** — names only (no build data) of jobs that had recent
+  failures but are now green. List them in the compact message as recovering.
+- **`recovering_count`** — number of recovering jobs.
+- **`healthy_jobs`** — list of fully healthy job names (no build data).
 - **`healthy_count`** — number of healthy jobs.
 - **`skipped`** — jobs excluded with a reason:
   - `disabled` — job is disabled in Jenkins, not relevant
