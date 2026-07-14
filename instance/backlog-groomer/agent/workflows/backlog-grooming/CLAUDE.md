@@ -51,40 +51,34 @@ If an error occurs, call `task_update` with `paused_reason`: "<what went wrong>"
 ### Step 3: Report results (DRY-RUN MODE)
 
 **DRY-RUN is currently ON.** Do NOT post comments or add labels to Jira.
+Output the full grooming report to stdout so it appears in the cycle transcript.
 
-Build a `results` list with one entry per ticket:
+For each ticket, print:
 
 ```
-CCXDEV-XXXXX: [Ready / Needs refinement / Consider closing] — <one-line reason>
-```
+=== DRY-RUN: CCXDEV-XXXXX ===
 
-Then call `task_update` with:
-- `summary`: the full results list joined by newlines (this IS the grooming output — the dashboard is the only place to see it in dry-run mode)
-- `metadata`:
-  ```json
-  {
-    "last_step": "report_complete",
-    "next_step": "grooming_complete",
-    "results": [
-      {"key": "CCXDEV-XXXXX", "verdict": "Ready", "clarity": "Good", "scope": "Appropriate", "component": "repo-name", "suggestion": "..."},
-      ...
-    ]
-  }
-  ```
+**Clarity**: [Good / Needs improvement / Unclear]
+**Scope**: [Appropriate / Consider splitting / Too vague]
+**Affected component**: [repo name or "Unknown"]
+**Suggestion**: [one actionable suggestion]
+**Recommendation**: [Ready for sprint / Needs refinement / Consider closing]
+```
 
 Do NOT call `jira_add_comment` or `jira_update_issue`.
+
+After the report, call `task_update` with `summary`: "Report complete",
+`metadata`: `{"last_step": "report_complete", "next_step": "grooming_complete"}`.
 
 <!-- LIVE MODE — delete the DRY-RUN block above and uncomment this to go live:
 
 For each ticket, post a Jira comment using `jira_add_comment` with the
-assessment. Append footer:
+assessment (without the DRY-RUN header). Append footer:
 
 ---
 _Automated grooming by backlog-groomer bot_
 
 Then add `ai-groomed` label via `jira_update_issue`.
-
-Still call `task_update` with the summary + results metadata as above.
 
 END LIVE MODE -->
 
@@ -92,10 +86,10 @@ END LIVE MODE -->
 
 Three calls, all required:
 
-1. `task_update` with `status: done`, `summary`: keep the per-ticket results from step 3 (do NOT replace with a generic count),
+1. `task_update` with `status: done`, `summary`: "Assessed N tickets — X ready, Y need refinement",
    `metadata`: `{"last_step": "grooming_complete", "tickets_assessed": N}`
 2. `progress_store` with `task_id`: batch task ID, `instance_id`: your instance ID,
-   `cycle_type`: `task_work`, `progress`: `{"last_step": "grooming_complete", "summary": "<first 200 chars of summary>", "tickets_assessed": N}`
+   `cycle_type`: `task_work`, `progress`: `{"last_step": "grooming_complete", "summary": "<same>", "tickets_assessed": N}`
 3. `bot_status_update` with `state: idle`, message: "Grooming complete. Sleeping..."
 
 Do NOT skip `status: done` on `task_update` — without it the dashboard shows the task stuck as in-progress.
