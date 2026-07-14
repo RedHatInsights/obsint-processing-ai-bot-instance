@@ -1,9 +1,10 @@
 name: watchduty
 type: workflow
-description: Scheduled watchduty workflow — monitors Jenkins CI jobs and reports via Slack
+description: Scheduled watchduty workflow — monitors Jenkins CI and MintMaker PRs, reports via Slack
 
 preflight:
   - 01-jenkins-status.py
+  - 02-mintmaker-prs.py
 
 provides:
   claude_md: CLAUDE.md
