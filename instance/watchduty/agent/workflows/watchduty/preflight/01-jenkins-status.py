@@ -187,29 +187,29 @@ def send_compact_slack(head_failing, recovering, healthy, skipped, changed_jobs=
         return False
 
     if changed_jobs:
-        lines = ["CCX Jenkins Watchduty Report"]
+        lines = ["\U0001f6a6 *CCX Jenkins Watchduty Report*"]
     else:
-        lines = ["CCX Jenkins Watchduty Report (no change)"]
+        lines = ["\U0001f6a6 *CCX Jenkins Watchduty Report (no change)*"]
     lines.append("")
 
     if head_failing:
         fail_names = ", ".join(j["name"] for j in head_failing)
-        lines.append(f"FAILING ({len(head_failing)}): {fail_names}")
+        lines.append(f"\U0001f534 Failing ({len(head_failing)}): {fail_names}")
         if not changed_jobs:
-            lines.append("  -- No new failures since last report, skipping AI analysis.")
+            lines.append("   No new failures since last report, skipping AI analysis.")
 
     if recovering:
-        lines.append(f"RECOVERING ({len(recovering)}): {', '.join(recovering)}")
+        lines.append(f"\U0001f504 Recovering ({len(recovering)}): {', '.join(recovering)}")
 
     if healthy:
-        if len(healthy) <= 8:
-            lines.append(f"HEALTHY ({len(healthy)}): {', '.join(healthy)}")
+        if len(healthy) <= 6:
+            lines.append(f"✅ Healthy ({len(healthy)}): {', '.join(healthy)}")
         else:
-            lines.append(f"HEALTHY ({len(healthy)}): {', '.join(healthy[:6])}, ...")
+            lines.append(f"✅ Healthy ({len(healthy)}): {', '.join(healthy[:6])}, ...")
 
     building = [s["name"] for s in skipped if s.get("reason") == "building"]
     if building:
-        lines.append(f"BUILDING ({len(building)}): {', '.join(building)}")
+        lines.append(f"\U0001f6e0️ Building ({len(building)}): {', '.join(building)}")
 
     msg = "\n".join(lines)
 
