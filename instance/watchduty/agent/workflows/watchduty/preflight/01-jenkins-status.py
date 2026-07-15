@@ -58,24 +58,74 @@ def fetch_jenkins_data():
         return None
 
 
-def fetch_tracked_jobs():
-    """Fetch active tasks from memory-server to find already-tracked failing jobs."""
-    if not INSTANCE_ID:
-        return set()
+def fetch_tracked_tasks():
+    """Fetch active tasks from memory-server. Returns {repo: external_key} for scheduled tasks."""
     try:
-        params = urllib.parse.urlencode({
-            "instance_id": INSTANCE_ID,
-            "exclude_status": "archived",
-            "limit": "100",
-        })
-        url = f"{MEMORY_SERVER}/api/tasks?{params}"
+        params = {"exclude_status": "archived", "limit": "100"}
+        if INSTANCE_ID:
+            params["instance_id"] = INSTANCE_ID
+        url = f"{MEMORY_SERVER}/api/tasks?{urllib.parse.urlencode(params)}"
+        print(f"DEBUG: fetching tasks from {url}", file=sys.stderr)
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode())
-        return {t["repo"] for t in data.get("tasks", []) if t.get("repo")}
+        tasks = data.get("tasks", [])
+        tracked = {
+            t["repo"]: t["external_key"]
+            for t in tasks
+            if t.get("repo") and t.get("source_type") == "scheduled"
+        }
+        print(f"DEBUG: found {len(tracked)} tracked jobs: {set(tracked.keys())}", file=sys.stderr)
+        return tracked
     except Exception as e:
         print(f"WARN: could not fetch tracked tasks: {e}", file=sys.stderr)
-        return set()
+        return {}
+
+
+def archive_task(external_key):
+    """Archive a task via memory-server REST API (soft delete)."""
+    try:
+        url = f"{MEMORY_SERVER}/api/tasks/{urllib.parse.quote(external_key, safe='')}"
+        req = urllib.request.Request(url, method="DELETE")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp.read()
+        print(f"DEBUG: archived task {external_key}", file=sys.stderr)
+        return True
+    except Exception as e:
+        print(f"WARN: could not archive task {external_key}: {e}", file=sys.stderr)
+        return False
+
+
+def delete_memory_for_job(job_name):
+    """Delete memory entries tagged watchduty:jenkins:<job_name>."""
+    try:
+        params = urllib.parse.urlencode({"tag": f"watchduty:jenkins:{job_name}", "limit": "10"})
+        url = f"{MEMORY_SERVER}/api/memories?{params}"
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+        for item in data.get("items", []):
+            mem_id = item["id"]
+            del_url = f"{MEMORY_SERVER}/api/memories/{mem_id}"
+            del_req = urllib.request.Request(del_url, method="DELETE")
+            with urllib.request.urlopen(del_req, timeout=10) as resp:
+                resp.read()
+            print(f"DEBUG: deleted memory {mem_id} for {job_name}", file=sys.stderr)
+    except Exception as e:
+        print(f"WARN: could not delete memory for {job_name}: {e}", file=sys.stderr)
+
+
+def cleanup_recovered_jobs(tracked_tasks, failing_names):
+    """Archive tasks and delete memories for jobs that have recovered."""
+    recovered = []
+    for repo, ext_key in tracked_tasks.items():
+        if repo not in failing_names:
+            archive_task(ext_key)
+            delete_memory_for_job(repo)
+            recovered.append(repo)
+    if recovered:
+        print(f"DEBUG: cleaned up {len(recovered)} recovered jobs: {recovered}", file=sys.stderr)
+    return recovered
 
 
 def fetch_stored_signatures():
@@ -179,6 +229,21 @@ def fetch_build_detail_for_job(job):
         pass
 
 
+JENKINS_URLS = {
+    "qe": "https://jenkins-csb-insights-qe-main.dno.corp.redhat.com/job/ccx/job",
+    "idp": "https://jenkins-csb-ccx-dev-main.dno.corp.redhat.com/job",
+}
+
+
+def _jenkins_url(job):
+    """Build Jenkins URL for the latest failed build of a job."""
+    inst = job.get("instance", "qe")
+    name = job.get("name", "")
+    build_num = job.get("lastFailedBuild", {}).get("number", "")
+    base = JENKINS_URLS.get(inst, JENKINS_URLS["qe"])
+    return f"{base}/{name}/{build_num}/"
+
+
 def send_compact_slack(head_failing, recovering, healthy, skipped, changed_jobs=None):
     """Send compact Slack message directly via webhook (zero AI tokens)."""
     webhook_url = os.environ.get("SLACK_WEBHOOK_URL", "")
@@ -193,10 +258,15 @@ def send_compact_slack(head_failing, recovering, healthy, skipped, changed_jobs=
     lines.append("")
 
     if head_failing:
-        fail_names = ", ".join(j["name"] for j in head_failing)
-        lines.append(f"\U0001f534 Failing ({len(head_failing)}): {fail_names}")
         if not changed_jobs:
-            lines.append("   No new failures since last report, skipping AI analysis.")
+            lines.append(f"⚠️ *Failing ({len(head_failing)}) — no change since last report:*")
+        else:
+            lines.append(f"⚠️ *Failing ({len(head_failing)}):*")
+        for j in head_failing:
+            name = j["name"]
+            build_num = j.get("lastFailedBuild", {}).get("number", "")
+            url = _jenkins_url(j)
+            lines.append(f"\U0001f534 <{url}|{name}> — last failed #{build_num}")
 
     if recovering:
         lines.append(f"\U0001f504 Recovering ({len(recovering)}): {', '.join(recovering)}")
@@ -214,7 +284,7 @@ def send_compact_slack(head_failing, recovering, healthy, skipped, changed_jobs=
     msg = "\n".join(lines)
 
     try:
-        payload = json.dumps({"msg": msg}).encode()
+        payload = json.dumps({"text": msg}).encode()
         req = urllib.request.Request(
             webhook_url,
             data=payload,
@@ -295,6 +365,11 @@ def main():
         return
 
     if not has_failures:
+        tracked_tasks = fetch_tracked_tasks()
+        if tracked_tasks:
+            recovered = cleanup_recovered_jobs(tracked_tasks, set())
+            if recovered:
+                print(f"DEBUG: all jobs healthy, cleaned up {len(recovered)} stale tasks", file=sys.stderr)
         total_ok = len(recovering) + len(healthy)
         json.dump(
             {"status": "skip", "content": f"Pre-flight: all {total_ok} eligible Jenkins jobs are healthy. Skipping cycle."},
@@ -302,8 +377,12 @@ def main():
         )
         return
 
-    tracked_jobs = fetch_tracked_jobs()
+    tracked_tasks = fetch_tracked_tasks()
     failing_names = {j["name"] for j in head_failing}
+
+    recovered = cleanup_recovered_jobs(tracked_tasks, failing_names)
+
+    tracked_jobs = set(tracked_tasks.keys()) - set(recovered)
     new_failures = failing_names - tracked_jobs
 
     if not new_failures:

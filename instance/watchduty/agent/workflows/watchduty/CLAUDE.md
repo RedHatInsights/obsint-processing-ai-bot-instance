@@ -142,23 +142,29 @@ One message per cycle summarizing all jobs. Format:
 ⚡ Isolated blip (1): ccx-external-data-pipeline-prod (#7756)
 
 ⚠️ Needs attention:
-🔴 ccx-update-risk-backend-stage — consecutive-fail since #4742 (3 builds)
+🔴 <https://jenkins-csb-insights-qe-main.dno.corp.redhat.com/job/ccx/job/ccx-update-risk-backend-stage/4744/|ccx-update-risk-backend-stage> — consecutive-fail since #4742 (3 builds)
    → Infra: OOM killed in test stage (exit code 137)
-🟡 internal-pipeline-tests-prod — flapping (4 transitions in 7 builds)
+🟡 <https://jenkins-csb-ccx-dev-main.dno.corp.redhat.com/job/internal-pipeline-tests-prod/456/|internal-pipeline-tests-prod> — flapping (4 transitions in 7 builds)
    → Real issue: endpoint returning 503 (details sent)
 ```
 
 Rules for the compact message:
-- Use Slack mrkdwn: `*bold*` for titles, emojis for status indicators
+- Use Slack mrkdwn: `*bold*` for titles, emojis for status indicators,
+  `<url|label>` for clickable job name hyperlinks
 - Group healthy/recovering/blip jobs on one line each (just names,
   comma-separated)
-- For failing jobs: show job name, pattern, build range, and a one-line cause
+- For failing jobs: make the job name a hyperlink to the latest failed
+  build using `<jenkins-url|job-name>`, then pattern, build range, and
+  a one-line cause
+- Build the Jenkins link from the job's `instance` field:
+  - `qe` → `https://jenkins-csb-insights-qe-main.dno.corp.redhat.com/job/ccx/job/<job-name>/<build>/`
+  - `idp` → `https://jenkins-csb-ccx-dev-main.dno.corp.redhat.com/job/<job-name>/<build>/`
 - If the cause is infrastructure, prefix with `→ Infra:`
 - If the cause is a real issue, prefix with `→ Real issue:`
 - If a description message was sent this cycle or in a previous cycle (found
   in memory), append `(details sent)` — do not repeat the error description
   in the compact message
-- Keep the entire message under 2000 characters
+- Keep the entire message under 3000 characters
 
 #### Detailed description message (only for NEW real issues — via `/slack-notify` skill)
 
@@ -173,27 +179,25 @@ Keep it short — the watchduty person will open the link to see full details.
 Focus only on the actual error and a plain-language guess at the cause:
 
 ```
-🔍 *New failure: ccx-update-risk-backend-stage* (since #4742, 3 builds)
+🔍 *New failure: <https://jenkins-csb-insights-qe-main.dno.corp.redhat.com/job/ccx/job/ccx-update-risk-backend-stage/4744/|ccx-update-risk-backend-stage>* (since #4742, 3 builds)
 <!subteam^S043UGRST2L>
 
 > Error: endpoint returning 503 instead of 200
 > AssertionError: assert response.status_code == 200 (got 503)
 Likely cause: upstream service down or schema changed after a deployment
-
-🔗 https://jenkins-csb-insights-qe-main.dno.corp.redhat.com/job/ccx/job/ccx-update-risk-backend-stage/4744/
 ```
 
 Rules for description messages:
-- Use Slack mrkdwn: `*bold*` for job name, `>` for error quotes, emojis
-  for visual markers.
+- Use Slack mrkdwn: `*bold*` for title, `>` for error quotes, emojis
+  for visual markers, `<url|label>` for clickable job name hyperlinks.
 - **Include the key error line(s)** — quote the specific error/assertion from
   the log (1-3 lines max, with `>` block quotes), so the reader sees what
   broke at a glance.
 - **One-line likely cause** — in simple words, what might be behind it.
-- **One build link** — the most recent failed build, prefixed with 🔗.
+- **Make the job name a hyperlink** using `<jenkins-url|job-name>` — build
+  the URL from the job's `instance` field (see compact message rules).
 - **Ping the team** — always include `<!subteam^S043UGRST2L>` on description
   messages for real issues. This mentions the on-call group in Slack.
-  Do NOT use `@ccx-processing-ic` — it does not resolve in Slack.
 - Keep the entire message under 500 characters.
 
 ### Step 6 — Update tasks and memory
@@ -256,7 +260,7 @@ Do NOT loop back; one pass per cycle.
 - **Keep descriptions minimal.** Include the specific error line(s) from the
   log (1-3 lines max, quoted with `>`), but don't dump full stack traces. The
   watchduty person can open the Jenkins link for the rest.
-- **Always ping `@ccx-processing-ic`** in description messages for real issues.
+- **Always ping the team** with `<!subteam^S043UGRST2L>` in description messages for real issues.
 
 ## Important Rules
 
