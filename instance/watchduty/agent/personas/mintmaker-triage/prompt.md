@@ -91,21 +91,14 @@ Rules:
 ## Passing PRs
 
 The preflight also includes PRs with passing CI. For each one, check
-the actual state with `gh pr view <number> --repo <repo> --json state,mergedAt`:
+the actual state with `gh pr view <number> --repo <repo> --json state`:
 
-- **Already merged** → clean up: call `task_remove(external_key="mintmaker:<repo>#<pr>",
-  source_type="scheduled")` if a task exists, remove the memory dedup entry,
-  and note it in the summary as merged.
 - **Waiting for review** → note in the summary that it needs a review.
   If it's been waiting a long time (>3 days), flag it.
-- **Closed without merge** → clean up task and memory entry, same as merged.
 - **Auto-merge pending** → skip, it will merge on its own.
 
-## Understanding CI Status
-
-The preflight data comes from a daily CSV snapshot. Be aware:
-- **"ok" PRs may have already merged** — check the actual PR state first.
-- A PR with passing CI may still need human approval (frontend repos).
+Cleanup of merged/closed PRs (task archival + memory removal) is handled
+by the preflight script at zero token cost. Do not do it here.
 
 ## Common Patterns
 
@@ -124,18 +117,4 @@ Track each failing PR as a task:
 Use memory for dedup — tag with `mintmaker:<repo>#<pr>` and store the set of
 failing check names as signature. Don't re-report PRs with the same failures.
 
-## Cleanup
-
-At the start of each MintMaker triage cycle, scan existing memory entries
-tagged `mintmaker:*` and check if those PRs are still open:
-
-```bash
-gh pr view <number> --repo RedHatInsights/<repo> --json state -q .state
-```
-
-If the PR is `MERGED` or `CLOSED`, clean up:
-- `task_remove(external_key="mintmaker:<repo>#<pr>", source_type="scheduled")`
-- Remove the memory dedup entry
-
-This catches PRs that were fixed and merged between cycles and wouldn't
-appear in the preflight data anymore.
+Cleanup of merged/closed PRs is handled by the preflight script.
