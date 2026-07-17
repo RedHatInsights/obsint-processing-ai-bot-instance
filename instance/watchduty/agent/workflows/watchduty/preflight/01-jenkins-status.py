@@ -25,6 +25,7 @@ from pathlib import Path
 
 MEMORY_SERVER = os.environ.get("MEMORY_SERVER_URL", "http://devbot-memory-server:8080")
 INSTANCE_ID = os.environ.get("BOT_INSTANCE_ID", "")
+_preflight_debug = []
 
 
 def _find_skill_script():
@@ -60,12 +61,12 @@ def fetch_jenkins_data():
 
 def fetch_tracked_tasks():
     """Fetch active tasks from memory-server. Returns {repo: external_key} for scheduled tasks."""
+    global _preflight_debug
     try:
         params = {"exclude_status": "archived", "limit": "100"}
         if INSTANCE_ID:
             params["instance_id"] = INSTANCE_ID
         url = f"{MEMORY_SERVER}/api/tasks?{urllib.parse.urlencode(params)}"
-        print(f"DEBUG: fetching tasks from {url}", file=sys.stderr)
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode())
@@ -75,10 +76,11 @@ def fetch_tracked_tasks():
             for t in tasks
             if t.get("repo") and t.get("source_type") == "scheduled"
         }
-        print(f"DEBUG: found {len(tracked)} tracked jobs: {set(tracked.keys())}", file=sys.stderr)
+        _preflight_debug.append(f"tasks_api: {len(tasks)} total, {len(tracked)} scheduled jenkins")
+        _preflight_debug.append(f"tracked: {set(tracked.keys()) or 'none'}")
         return tracked
     except Exception as e:
-        print(f"WARN: could not fetch tracked tasks: {e}", file=sys.stderr)
+        _preflight_debug.append(f"tasks_api_error: {e}")
         return {}
 
 
@@ -384,6 +386,7 @@ def main():
 
     tracked_jobs = set(tracked_tasks.keys()) - set(recovered)
     new_failures = failing_names - tracked_jobs
+    _preflight_debug.append(f"failing: {failing_names}, tracked: {tracked_jobs}, new: {new_failures}")
 
     if not new_failures:
         stored_sigs = fetch_stored_signatures()
@@ -438,9 +441,13 @@ def main():
     new_failing = [j for j in head_failing if j["name"] in new_failures]
     tracked_failing = [j["name"] for j in head_failing if j["name"] not in new_failures]
 
+    debug_str = " | ".join(_preflight_debug) if _preflight_debug else ""
     header = f"Pre-flight: {len(new_failing)} NEW failing, {len(tracked_failing)} already tracked, {len(recovering)} recovering, {len(healthy)} healthy.\n"
     header += "Only NEW failures have full build data below. Already-tracked and recovering jobs are names only.\n"
-    header += "Do NOT re-run triage_jenkins.py for overview. Only fetch individual build details when analyzing a failure.\n\n"
+    header += "Do NOT re-run triage_jenkins.py for overview. Only fetch individual build details when analyzing a failure.\n"
+    if debug_str:
+        header += f"[DEBUG: {debug_str}]\n"
+    header += "\n"
 
     output = {
         "failing": new_failing,
