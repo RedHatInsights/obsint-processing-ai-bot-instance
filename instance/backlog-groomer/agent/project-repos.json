@@ -1,0 +1,113 @@
+{
+  "app-interface": {
+    "url": "https://gitlab.cee.redhat.com/platex-rehor-bot/app-interface.git",
+    "upstream": "https://gitlab.cee.redhat.com/service/app-interface.git",
+    "host": "gitlab",
+    "readonly": true
+  },
+  "ocp-advisor-frontend": {
+    "url": "git@github.com-bot:platex-rehor-bot/ocp-advisor-frontend.git",
+    "upstream": "git@github.com:RedHatInsights/ocp-advisor-frontend.git",
+    "readonly": true
+  },
+  "data-pipeline": {
+    "url": "git@github.com-bot:platex-rehor-bot/data-pipeline.git",
+    "upstream": "git@github.com:RedHatInsights/data-pipeline.git",
+    "readonly": true
+  },
+  "parquet-factory": {
+    "url": "git@github.com-bot:platex-rehor-bot/parquet-factory.git",
+    "upstream": "git@github.com:RedHatInsights/parquet-factory.git",
+    "readonly": true
+  },
+  "insights-results-smart-proxy": {
+    "url": "git@github.com-bot:platex-rehor-bot/insights-results-smart-proxy.git",
+    "upstream": "git@github.com:RedHatInsights/insights-results-smart-proxy.git",
+    "readonly": true
+  },
+  "insights-ccx-messaging": {
+    "url": "git@github.com-bot:platex-rehor-bot/insights-ccx-messaging.git",
+    "upstream": "git@github.com:RedHatInsights/insights-ccx-messaging.git",
+    "readonly": true
+  },
+  "insights-results-aggregator": {
+    "url": "git@github.com-bot:platex-rehor-bot/insights-results-aggregator.git",
+    "upstream": "git@github.com:RedHatInsights/insights-results-aggregator.git",
+    "readonly": true
+  },
+  "insights-results-aggregator-exporter": {
+    "url": "git@github.com-bot:platex-rehor-bot/insights-results-aggregator-exporter.git",
+    "upstream": "git@github.com:RedHatInsights/insights-results-aggregator-exporter.git",
+    "readonly": true
+  },
+  "insights-results-aggregator-utils": {
+    "url": "git@github.com-bot:platex-rehor-bot/insights-results-aggregator-utils.git",
+    "upstream": "git@github.com:RedHatInsights/insights-results-aggregator-utils.git",
+    "readonly": true
+  },
+  "insights-results-aggregator-cleaner": {
+    "url": "git@github.com-bot:platex-rehor-bot/insights-results-aggregator-cleaner.git",
+    "upstream": "git@github.com:RedHatInsights/insights-results-aggregator-cleaner.git",
+    "readonly": true
+  },
+  "insights-results-aggregator-mock": {
+    "url": "git@github.com-bot:platex-rehor-bot/insights-results-aggregator-mock.git",
+    "upstream": "git@github.com:RedHatInsights/insights-results-aggregator-mock.git",
+    "readonly": true
+  },
+  "content-service": {
+    "url": "git@github.com-bot:platex-rehor-bot/content-service.git",
+    "upstream": "git@github.com:RedHatInsights/content-service.git",
+    "readonly": true
+  },
+  "insights-content-template-renderer": {
+    "url": "git@github.com-bot:platex-rehor-bot/insights-content-template-renderer.git",
+    "upstream": "git@github.com:RedHatInsights/insights-content-template-renderer.git",
+    "readonly": true
+  },
+  "insights-operator-utils": {
+    "url": "git@github.com-bot:platex-rehor-bot/insights-operator-utils.git",
+    "upstream": "git@github.com:RedHatInsights/insights-operator-utils.git",
+    "readonly": true
+  },
+  "ccx-notification-service": {
+    "url": "git@github.com-bot:platex-rehor-bot/ccx-notification-service.git",
+    "upstream": "git@github.com:RedHatInsights/ccx-notification-service.git",
+    "readonly": true
+  },
+  "ccx-notification-writer": {
+    "url": "git@github.com-bot:platex-rehor-bot/ccx-notification-writer.git",
+    "upstream": "git@github.com:RedHatInsights/ccx-notification-writer.git",
+    "readonly": true
+  },
+  "obsint-mocks": {
+    "url": "git@github.com-bot:platex-rehor-bot/obsint-mocks.git",
+    "upstream": "git@github.com:RedHatInsights/obsint-mocks.git",
+    "readonly": true
+  },
+  "processing-tools": {
+    "url": "git@github.com-bot:platex-rehor-bot/processing-tools.git",
+    "upstream": "git@github.com:RedHatInsights/processing-tools.git",
+    "readonly": true
+  },
+  "ccx-upgrades-data-eng": {
+    "url": "git@github.com-bot:platex-rehor-bot/ccx-upgrades-data-eng.git",
+    "upstream": "git@github.com:RedHatInsights/ccx-upgrades-data-eng.git",
+    "readonly": true
+  },
+  "ccx-upgrades-inference": {
+    "url": "git@github.com-bot:platex-rehor-bot/ccx-upgrades-inference.git",
+    "upstream": "git@github.com:RedHatInsights/ccx-upgrades-inference.git",
+    "readonly": true
+  },
+  "obsint-processing-ai-bot-instance": {
+    "url": "git@github.com-bot:platex-rehor-bot/obsint-processing-ai-bot-instance.git",
+    "upstream": "git@github.com:RedHatInsights/obsint-processing-ai-bot-instance.git",
+    "readonly": true
+  },
+  "insights-behavioral-spec": {
+    "url": "git@github.com-bot:platex-rehor-bot/insights-behavioral-spec.git",
+    "upstream": "git@github.com:RedHatInsights/insights-behavioral-spec.git",
+    "readonly": true
+  }
+}

@@ -58,6 +58,67 @@ returned empty), mark the batch task `done` with `summary`:
 "No new tickets to groom", write `data/cycle-sleep.json` with
 `{"recommended_sleep": 25200, "reason": "no_new_tickets"}`, and exit.
 
+### Step 1.5: CVE Grooming (auto-labeling)
+
+Check if your prompt contains a `## CVE Grooming` section (from the
+`02-cve-scan.py` preflight). If it does NOT exist, skip to Step 2.
+
+For each CVE ticket in the section:
+
+1. **Extract component name** from the summary. CVE summaries follow the
+   pattern `CVE-YYYY-NNNNN {Component}: {Package}: {Title}`. The component
+   is the first token after the CVE ID (e.g., in
+   `CVE-2026-13676 aggregator: golang: ...`, the component is `aggregator`).
+
+2. **Map component to repo** using the mapping table in the
+   `personas/backlog-grooming/prompt.md` persona (section "CVE Component
+   to Repo Mapping"). Cross-reference against `project-repos.json` to
+   confirm the repo key is valid. If no match, mark as "unknown component".
+
+3. **Determine labels to assign**:
+   - `obsint-processing-ai` (bot pickup label)
+   - `repo:<matched-repo-name>` (component repo)
+   - `repo:app-interface` (always — every CVE needs a prod image update)
+
+<!-- CVE GROOMING DRY-RUN — currently ON -->
+
+4. **DRY-RUN**: Do NOT call `jira_update_issue`. Instead, include proposed
+   labels in `task_update` metadata:
+
+   ```
+   task_update metadata.cve_grooming: [
+     {"key": "CCXDEV-XXXXX", "component": "aggregator",
+      "proposed_labels": ["obsint-processing-ai", "repo:insights-results-aggregator", "repo:app-interface"],
+      "match_confidence": "high"},
+     ...
+   ]
+   ```
+
+   Append a summary line per ticket:
+   ```
+   CVE: CCXDEV-XXXXX (aggregator) → +obsint-processing-ai +repo:insights-results-aggregator +repo:app-interface
+   ```
+
+<!-- LIVE MODE — delete the DRY-RUN block above and uncomment this:
+
+4. **LIVE**: For each ticket, call `jira_update_issue` to ADD labels:
+   - `obsint-processing-ai`
+   - `repo:<matched-repo-name>`
+   - `repo:app-interface`
+
+   Do NOT remove existing labels. Only add new ones.
+
+   After labeling, include the results in `task_update` metadata as above.
+
+END LIVE MODE -->
+
+If a component cannot be matched, include it in the report with
+`"match_confidence": "unknown"` and note it needs manual mapping.
+
+After processing all CVE tickets, update the batch task:
+`task_update` with `summary`: append CVE grooming results,
+`metadata`: add `cve_grooming` array with per-ticket results.
+
 ### Step 2: Assess each ticket
 
 Read the persona prompt at `personas/backlog-grooming/prompt.md` for team

@@ -17,6 +17,46 @@ You are grooming Jira backlog tickets for the ObsInt Processing team (CCXDEV pro
 4. **Priority set** — not "Undefined"
 5. **Acceptance criteria** — nice to have, not required
 
+### CVE Grooming
+
+CVE tickets need three labels so the dev bot can pick them up:
+1. `obsint-processing-ai` — the bot pickup label
+2. `repo:<name>` — which repo contains the affected component
+3. `repo:app-interface` — always added, every CVE fix needs a prod image update
+
+**Parsing CVE summaries**: The format is `CVE-YYYY-NNNNN {Component}: {Package}: {Title}`.
+Extract the component (first token after the CVE ID) and look it up in the table below.
+
+#### CVE Component to Repo Mapping
+
+| Component (from CVE summary) | Repo label |
+|---|---|
+| aggregator | `repo:insights-results-aggregator` |
+| data-pipeline | `repo:data-pipeline` |
+| notification-writer | `repo:ccx-notification-writer` |
+| ocp-advisor-frontend, insights-ocp-advisor | `repo:ocp-advisor-frontend` |
+| ccx-messaging | `repo:insights-ccx-messaging` |
+| parquet-factory | `repo:parquet-factory` |
+| upgrades-inference | `repo:ccx-upgrades-inference` |
+| aggregator-cleaner, insights-results-aggregator-cleaner | `repo:insights-results-aggregator-cleaner` |
+| smart-proxy | `repo:insights-results-smart-proxy` |
+| content-renderer | `repo:insights-content-template-renderer` |
+| content-service | `repo:content-service` |
+| upgrades-data-eng | `repo:ccx-upgrades-data-eng` |
+| notification-service | `repo:ccx-notification-service` |
+| insights-behavioral-spec | `repo:insights-behavioral-spec` |
+| obsint-mocks | `repo:obsint-mocks` |
+| aggregator-exporter | `repo:insights-results-aggregator-exporter` |
+| processing-tools | `repo:processing-tools` |
+| insights-operator-utils | `repo:insights-operator-utils` |
+| ccx-upgrades-inference | `repo:ccx-upgrades-inference` |
+| ccx-upgrades-data-eng | `repo:ccx-upgrades-data-eng` |
+| ccx-notification-service | `repo:ccx-notification-service` |
+| ccx-notification-writer | `repo:ccx-notification-writer` |
+
+Match is case-insensitive. If the component doesn't match any entry, flag as
+"unknown component — needs manual mapping" and skip labeling for that ticket.
+
 ### Common issues to flag
 
 - **GlitchTip auto-tickets** — often just an error title and a link, no description. Need: error context, which environment, whether it's new or recurring.

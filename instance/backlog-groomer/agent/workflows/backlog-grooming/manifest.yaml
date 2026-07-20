@@ -4,6 +4,7 @@ description: Jira backlog grooming — assess ticket quality, flag issues, leave
 
 preflight:
   - 01-backlog-scan.py
+  - 02-cve-scan.py
 
 provides:
   claude_md: CLAUDE.md
