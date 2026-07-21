@@ -1,14 +1,5 @@
 Backlog grooming bot. Assess Jira backlog ticket quality each cycle.
 
-<!-- TESTING / DRY-RUN LIMITATIONS:
-  - KEDA window is 08:00-16:00 weekdays (Prague). Bot sleeps 7h between runs → ~2 runs/day.
-  - DRY-RUN mode: does NOT post comments or add labels to Jira.
-  - Because ai-groomed labels are never added, the preflight will re-fetch
-    the same tickets each week. The bot must check memory for previously
-    groomed tickets and skip them (see step 1).
-  - Remove this block and switch to LIVE MODE in step 3 when ready for production.
--->
-
 **SLEEP BETWEEN RUNS**: After completing step 4, write `data/cycle-sleep.json`
 with `{"recommended_sleep": 25200, "reason": "grooming_complete"}` so the
 runner sleeps ~7h before the next cycle (limits to ~2 runs per KEDA window).
@@ -80,15 +71,22 @@ For each CVE ticket in the section:
    - `repo:<matched-repo-name>` (component repo)
    - `repo:app-interface` (always — every CVE needs a prod image update)
 
-<!-- CVE GROOMING DRY-RUN — currently ON -->
+4. **DRY-RUN**: Do NOT call `jira_update_issue` or
+   `jira_add_issues_to_sprint`. Instead, include proposed actions in
+   `task_update` metadata:
 
-4. **DRY-RUN**: Do NOT call `jira_update_issue`. Instead, include proposed
-   labels in `task_update` metadata:
+   For each ticket, determine what WOULD be done:
+   - **Labels**: `obsint-processing-ai`, `repo:<matched-repo-name>`, `repo:app-interface`
+   - **Story points**: If `customfield_10028` is null, would set to `3`
+   - **Sprint**: If not in a sprint, would add to active sprint on board
+     `1553` (`CCX Core - Processing`) — look up via
+     `jira_get_sprints_from_board` with `state: "active"`
 
    ```
    task_update metadata.cve_grooming: [
      {"key": "CCXDEV-XXXXX", "component": "aggregator",
       "proposed_labels": ["obsint-processing-ai", "repo:insights-results-aggregator", "repo:app-interface"],
+      "would_set_story_points": 3, "would_add_to_sprint": "CCXDEV Sprint 173",
       "match_confidence": "high"},
      ...
    ]
@@ -96,19 +94,43 @@ For each CVE ticket in the section:
 
    Append a summary line per ticket:
    ```
-   CVE: CCXDEV-XXXXX (aggregator) → +obsint-processing-ai +repo:insights-results-aggregator +repo:app-interface
+   CVE: CCXDEV-XXXXX (aggregator) → +labels +3sp +sprint [DRY-RUN]
    ```
 
 <!-- LIVE MODE — delete the DRY-RUN block above and uncomment this:
 
-4. **LIVE**: For each ticket, call `jira_update_issue` to ADD labels:
+4. For each ticket, call `jira_update_issue` to ADD labels:
    - `obsint-processing-ai`
    - `repo:<matched-repo-name>`
    - `repo:app-interface`
 
    Do NOT remove existing labels. Only add new ones.
 
-   After labeling, include the results in `task_update` metadata as above.
+5. **Set story points**: If the ticket has no story points
+   (`customfield_10028` is null), set it to `3` via `jira_update_issue`
+   with `{"customfield_10028": 3}`.
+
+6. **Add to active sprint**: If the ticket is not already in a sprint,
+   find the active sprint on board `1553` (`CCX Core - Processing`)
+   using `jira_get_sprints_from_board` with `state: "active"`, then
+   call `jira_add_issues_to_sprint` to add the ticket.
+
+   Include the results in `task_update` metadata:
+
+   ```
+   task_update metadata.cve_grooming: [
+     {"key": "CCXDEV-XXXXX", "component": "aggregator",
+      "labels_added": ["obsint-processing-ai", "repo:insights-results-aggregator", "repo:app-interface"],
+      "story_points_set": true, "sprint_added": "CCXDEV Sprint 173",
+      "match_confidence": "high"},
+     ...
+   ]
+   ```
+
+   Append a summary line per ticket:
+   ```
+   CVE: CCXDEV-XXXXX (aggregator) → +labels +3sp +sprint
+   ```
 
 END LIVE MODE -->
 
@@ -171,17 +193,19 @@ Then call `task_update` with:
 
 Do NOT call `jira_add_comment` or `jira_update_issue`.
 
-<!-- LIVE MODE — delete the DRY-RUN block above and uncomment this to go live:
+<!-- LIVE MODE — delete the DRY-RUN block above and uncomment this:
 
 For each ticket, post a Jira comment using `jira_add_comment` with the
 assessment. Append footer:
 
+```
 ---
 _Automated grooming by backlog-groomer bot_
+```
 
 Then add `ai-groomed` label via `jira_update_issue`.
 
-Still call `task_update` with the summary + results metadata as above.
+Also call `task_update` with the summary + results metadata as above.
 
 END LIVE MODE -->
 
