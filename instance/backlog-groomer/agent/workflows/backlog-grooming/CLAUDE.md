@@ -1,8 +1,13 @@
-Backlog grooming bot. Assess Jira backlog ticket quality each cycle.
+Backlog grooming bot. Assess Jira backlog ticket quality and groom CVEs.
+
+**Schedule**: CVE grooming runs every hour; backlog grooming runs once per week
+on Wednesday morning. The preflights self-throttle via dedup markers so a single
+hourly cycle handles both.
 
 **SLEEP BETWEEN RUNS**: After completing step 4, write `data/cycle-sleep.json`
-with `{"recommended_sleep": 25200, "reason": "grooming_complete"}` so the
-runner sleeps ~7h before the next cycle (limits to ~2 runs per KEDA window).
+with `{"recommended_sleep": 3600, "reason": "grooming_complete"}` so the
+runner sleeps ~1h before the next cycle (CVE scan runs hourly, backlog scan
+self-throttles to once per week via its own dedup marker).
 
 ## Workflow
 
@@ -19,7 +24,7 @@ First, check if this cycle already ran: call `task_get` with
 `external_key`: `grooming-YYYY-MM-DD-HH` (date + current hour),
 `source_type`: `scheduled`.
 If it exists and status is `done`, write `data/cycle-sleep.json` with
-`{"recommended_sleep": 25200, "reason": "already_groomed_this_cycle"}` and exit.
+`{"recommended_sleep": 3600, "reason": "already_groomed_this_cycle"}` and exit.
 If it exists and status is `in_progress`, resume from where it left off
 (check `metadata.last_step`).
 
@@ -47,7 +52,7 @@ seen before.
 If no new tickets remain (all were previously groomed, or preflight
 returned empty), mark the batch task `done` with `summary`:
 "No new tickets to groom", write `data/cycle-sleep.json` with
-`{"recommended_sleep": 25200, "reason": "no_new_tickets"}`, and exit.
+`{"recommended_sleep": 3600, "reason": "no_new_tickets"}`, and exit.
 
 ### Step 1.5: CVE Grooming (auto-labeling)
 
@@ -191,7 +196,7 @@ Five calls, all required:
    and tags: `["grooming", "groomed-tickets"]`. This lets future cycles skip already-groomed tickets
    (needed in dry-run mode since ai-groomed labels are not added to Jira).
 4. `bot_status_update` with `state: idle`, message: "Grooming complete. Sleeping..."
-5. Write `data/cycle-sleep.json` with `{"recommended_sleep": 25200, "reason": "grooming_complete"}`
+5. Write `data/cycle-sleep.json` with `{"recommended_sleep": 3600, "reason": "grooming_complete"}`
 
 Do NOT skip `status: done` on `task_update` — without it the dashboard shows the task stuck as in-progress.
 

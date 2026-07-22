@@ -16,8 +16,9 @@ from jira_mcp import jira_call, jira_cleanup
 
 BOT_LABEL = os.environ.get("BOT_LABEL", "")
 SCRIPT_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent
-GROOMED_MARKER = SCRIPT_DIR / "data" / "groomed-hours.json"
+GROOMED_MARKER = SCRIPT_DIR / "data" / "groomed-weeks.json"
 NOT_STARTED_STATUSES = ("New", "Backlog", "Refinement", "To Do")
+GROOMING_DAY = 2  # Wednesday (Monday=0)
 
 
 def _search_backlog():
@@ -109,13 +110,13 @@ def _format_ticket(issue):
     return "\n".join(lines)
 
 
-def _already_groomed_this_hour():
-    """Check if we already groomed in the current hour (prevents re-runs)."""
-    hour_key = datetime.utcnow().strftime("%Y-%m-%d-%H")
+def _already_groomed_this_week():
+    """Check if we already groomed this ISO week (limits to once per week)."""
+    week_key = datetime.utcnow().strftime("%G-W%V")
     try:
         if GROOMED_MARKER.exists():
             done = json.loads(GROOMED_MARKER.read_text())
-            if hour_key in done:
+            if week_key in done:
                 return True
     except Exception:
         pass
@@ -123,15 +124,15 @@ def _already_groomed_this_hour():
 
 
 def _mark_groomed():
-    """Mark the current hour as groomed."""
-    hour_key = datetime.utcnow().strftime("%Y-%m-%d-%H")
+    """Mark the current ISO week as groomed."""
+    week_key = datetime.utcnow().strftime("%G-W%V")
     done = {}
     try:
         if GROOMED_MARKER.exists():
             done = json.loads(GROOMED_MARKER.read_text())
     except Exception:
         pass
-    done[hour_key] = True
+    done[week_key] = True
     GROOMED_MARKER.parent.mkdir(parents=True, exist_ok=True)
     GROOMED_MARKER.write_text(json.dumps(done))
 
@@ -141,9 +142,14 @@ def main():
         output_result("error", "BOT_INSTANCE_ID not set")
         return
 
-    if _already_groomed_this_hour():
-        print("Already groomed this hour — skipping", file=sys.stderr)
-        output_result("skip", "Already groomed this hour")
+    if datetime.utcnow().weekday() != GROOMING_DAY:
+        print("Not Wednesday — skipping backlog grooming", file=sys.stderr)
+        output_result("skip", "Backlog grooming only runs on Wednesdays")
+        return
+
+    if _already_groomed_this_week():
+        print("Already groomed this week — skipping", file=sys.stderr)
+        output_result("skip", "Already groomed this week")
         return
 
     print(f"Scanning backlog for label={BOT_LABEL}...", file=sys.stderr)
