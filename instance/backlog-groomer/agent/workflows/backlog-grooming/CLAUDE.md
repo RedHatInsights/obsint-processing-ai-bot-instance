@@ -71,34 +71,6 @@ For each CVE ticket in the section:
    - `repo:<matched-repo-name>` (component repo)
    - `repo:app-interface` (always — every CVE needs a prod image update)
 
-4. **DRY-RUN**: Do NOT call `jira_update_issue` or
-   `jira_add_issues_to_sprint`. Instead, include proposed actions in
-   `task_update` metadata:
-
-   For each ticket, determine what WOULD be done:
-   - **Labels**: `obsint-processing-ai`, `repo:<matched-repo-name>`, `repo:app-interface`
-   - **Story points**: If `customfield_10028` is null, would set to `3`
-   - **Sprint**: If not in a sprint, would add to active sprint on board
-     `1553` (`CCX Core - Processing`) — look up via
-     `jira_get_sprints_from_board` with `state: "active"`
-
-   ```
-   task_update metadata.cve_grooming: [
-     {"key": "CCXDEV-XXXXX", "component": "aggregator",
-      "proposed_labels": ["obsint-processing-ai", "repo:insights-results-aggregator", "repo:app-interface"],
-      "would_set_story_points": 3, "would_add_to_sprint": "CCXDEV Sprint 173",
-      "match_confidence": "high"},
-     ...
-   ]
-   ```
-
-   Append a summary line per ticket:
-   ```
-   CVE: CCXDEV-XXXXX (aggregator) → +labels +3sp +sprint [DRY-RUN]
-   ```
-
-<!-- LIVE MODE — delete the DRY-RUN block above and uncomment this:
-
 4. For each ticket, call `jira_update_issue` to ADD labels:
    - `obsint-processing-ai`
    - `repo:<matched-repo-name>`
@@ -131,8 +103,6 @@ For each CVE ticket in the section:
    ```
    CVE: CCXDEV-XXXXX (aggregator) → +labels +3sp +sprint
    ```
-
-END LIVE MODE -->
 
 If a component cannot be matched, include it in the report with
 `"match_confidence": "unknown"` and note it needs manual mapping.
