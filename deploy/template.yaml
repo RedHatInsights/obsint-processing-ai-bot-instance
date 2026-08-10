@@ -53,7 +53,7 @@ objects:
 #   2. NetworkPolicy (egress restricted to proxy + memory-server + DNS)
 #
 # Prerequisites (deployed by platform-frontend-ai-dev):
-#   - devbot-proxy       (ports 3128, 9090, 8443, 8444, 8446)
+#   - devbot-proxy       (ports 3128, 9090, 8443, 8444, 8446, 8447)
 #   - devbot-memory-server (port 8080)
 #   - devbot-secrets     (Vault secret with git identity + credentials)
 # ============================================================================
@@ -178,6 +178,9 @@ objects:
           # GH release upload — proxied through proxy container (port 8446)
           - name: GH_RELEASE_UPLOAD_URL
             value: http://devbot-proxy:8446/upload
+          # GlitchTip — proxied through proxy container (port 8447)
+          - name: GLITCHTIP_API_URL
+            value: http://devbot-proxy:8447
           # Secrets that stay in bot container (SSO for E2E)
           - name: SSO_USERNAME
             valueFrom:
@@ -227,6 +230,8 @@ objects:
       - port: 8444
         protocol: TCP
       - port: 8446
+        protocol: TCP
+      - port: 8447
         protocol: TCP
     - to:
       - podSelector:
