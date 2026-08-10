@@ -47,8 +47,9 @@ failures to analyze.
 
 The data is in your prompt as JSON. It contains:
 
-- **`failing`** — only NEW failing jobs (not yet tracked as tasks), with full
-  build data for analysis. Only these need detailed classification.
+- **`failing`** — only NEW failing jobs (not yet tracked as tasks), with
+  pre-classified pattern and build numbers. No raw build arrays — use
+  `triage_jenkins.py <job> <build>` to fetch failure details.
 - **`tracked_failing_jobs`** — names only of jobs that are still failing but
   already tracked as tasks. Include in the compact message but do NOT
   re-analyze. Add `(tracked)` suffix.
@@ -69,21 +70,24 @@ individual build details when you need to analyze a specific failure:
 python3 skills/triage-jenkins/triage_jenkins.py <job-name> <build-num>
 ```
 
-### Step 2 — Classify each eligible job
+### Step 2 — Patterns are pre-classified (skip)
 
-For each job in the `failing` list, classify its pattern:
+The preflight classifies each job's pattern deterministically. Each job in
+`failing` already has:
 
-| Pattern | Definition |
-|---------|------------|
-| **healthy** | All recent builds green |
-| **isolated-blip** | Single red surrounded by green, most recent is green |
-| **flapping** | 3+ status changes in last 7 builds |
-| **consecutive-fail** | 2+ reds in a row at the head |
-| **recovering** | Was failing, most recent build is green |
+- `pattern`: `consecutive-fail` or `flapping`
+- `consec_fails`: consecutive failures at head
+- `first_fail_build`: build number where streak started
+- `transitions`: (flapping only) status changes in last 7 builds
+- `sequence`: compact results string, e.g. `F-F-S-F-S-S-S`
+- `latest_fail_build`: build number for `triage_jenkins.py`
+- `failed_builds`: list of all failed build numbers (for cross-build comparison)
+
+Do NOT re-classify patterns. Proceed to Step 3.
 
 ### Step 3 — Analyze failures
 
-For any job that is **consecutive-fail** or **flapping**, fetch the build
+For any job with pattern `consecutive-fail` or `flapping`, fetch the build
 detail:
 
 ```bash

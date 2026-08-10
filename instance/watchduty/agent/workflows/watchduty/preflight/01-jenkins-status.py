@@ -349,6 +349,87 @@ def classify_jobs(data):
     return head_failing, recovering, healthy, skipped, len(head_failing) > 0
 
 
+def classify_pattern(job):
+    """Classify failure pattern from build history. Deterministic — no AI needed."""
+    builds = job.get("builds", [])
+    if not builds:
+        return {"pattern": "unknown"}
+
+    results = [b.get("result") for b in builds[:7]]
+    head = results[0] if results else None
+
+    if all(r == "SUCCESS" for r in results):
+        return {"pattern": "healthy"}
+
+    seq = "-".join("F" if r == "FAILURE" else "S" if r == "SUCCESS" else "?" for r in results)
+
+    if head == "SUCCESS":
+        fail_count = sum(1 for r in results if r == "FAILURE")
+        if fail_count == 1:
+            return {"pattern": "isolated-blip", "sequence": seq}
+        return {"pattern": "recovering", "sequence": seq}
+
+    consec = 0
+    first_fail = None
+    for b in builds[:7]:
+        if b.get("result") == "FAILURE":
+            consec += 1
+            first_fail = b["number"]
+        else:
+            break
+
+    transitions = sum(
+        1 for i in range(1, len(results))
+        if results[i] is not None and results[i - 1] is not None and results[i] != results[i - 1]
+    )
+
+    if transitions >= 3:
+        return {
+            "pattern": "flapping",
+            "transitions": transitions,
+            "first_fail_build": first_fail,
+            "consec_fails": consec,
+            "sequence": seq,
+        }
+
+    return {
+        "pattern": "consecutive-fail",
+        "first_fail_build": first_fail,
+        "consec_fails": consec,
+        "sequence": seq,
+    }
+
+
+def slim_job(job):
+    """Strip job to only fields the AI needs for analysis. Saves tokens.
+
+    Keeps: name, instance, pre-classified pattern, build numbers for
+    triage_jenkins.py invocation, and detail if already fetched.
+    Strips: full builds array, timestamps, durations, color, priority scores.
+    """
+    info = classify_pattern(job)
+
+    slim = {
+        "name": job["name"],
+        "instance": job.get("instance", "qe"),
+    }
+    slim.update(info)
+
+    lfb = job.get("lastFailedBuild")
+    if lfb and lfb.get("number"):
+        slim["latest_fail_build"] = lfb["number"]
+
+    builds = job.get("builds", [])
+    failed_builds = [b["number"] for b in builds[:7] if b.get("result") == "FAILURE"]
+    if failed_builds:
+        slim["failed_builds"] = failed_builds
+
+    if "detail" in job:
+        slim["detail"] = job["detail"]
+
+    return slim
+
+
 def main():
     data = fetch_jenkins_data()
     if data is None:
@@ -418,10 +499,10 @@ def main():
 
         header = f"Pre-flight: {len(jobs_to_analyze)} failing with CHANGED errors, {len(still_tracked)} tracked (same error), {len(recovering)} recovering, {len(healthy)} healthy.\n"
         header += "Error signature changed for these jobs — re-analyze and update memory.\n"
-        header += "Do NOT re-run triage_jenkins.py for overview. Only fetch individual build details when analyzing a failure.\n\n"
+        header += "Patterns pre-classified. Only fetch individual build details when analyzing a failure.\n\n"
 
         output = {
-            "failing": jobs_to_analyze,
+            "failing": [slim_job(j) for j in jobs_to_analyze],
             "tracked_failing_jobs": still_tracked,
             "tracked_failing_count": len(still_tracked),
             "recovering_jobs": recovering,
@@ -442,15 +523,14 @@ def main():
     tracked_failing = [j["name"] for j in head_failing if j["name"] not in new_failures]
 
     debug_str = " | ".join(_preflight_debug) if _preflight_debug else ""
-    header = f"Pre-flight: {len(new_failing)} NEW failing, {len(tracked_failing)} already tracked, {len(recovering)} recovering, {len(healthy)} healthy.\n"
-    header += "Only NEW failures have full build data below. Already-tracked and recovering jobs are names only.\n"
-    header += "Do NOT re-run triage_jenkins.py for overview. Only fetch individual build details when analyzing a failure.\n"
     if debug_str:
-        header += f"[DEBUG: {debug_str}]\n"
-    header += "\n"
+        print(f"DEBUG: {debug_str}", file=sys.stderr)
+
+    header = f"Pre-flight: {len(new_failing)} NEW failing, {len(tracked_failing)} already tracked, {len(recovering)} recovering, {len(healthy)} healthy.\n"
+    header += "Patterns pre-classified. Only fetch individual build details when analyzing a failure.\n\n"
 
     output = {
-        "failing": new_failing,
+        "failing": [slim_job(j) for j in new_failing],
         "tracked_failing_jobs": tracked_failing,
         "tracked_failing_count": len(tracked_failing),
         "recovering_jobs": recovering,
