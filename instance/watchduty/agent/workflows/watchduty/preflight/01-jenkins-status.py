@@ -261,27 +261,24 @@ def send_compact_slack(head_failing, recovering, healthy, skipped, changed_jobs=
 
     if head_failing:
         if not changed_jobs:
-            lines.append(f"⚠️ *Failing ({len(head_failing)}) — no change since last report:*")
+            lines.append(f"\U0001f534 *Failing ({len(head_failing)}) — no change since last report:*")
         else:
-            lines.append(f"⚠️ *Failing ({len(head_failing)}):*")
+            lines.append(f"\U0001f534 *Failing ({len(head_failing)}):*")
         for j in head_failing:
             name = j["name"]
             build_num = j.get("lastFailedBuild", {}).get("number", "")
             url = _jenkins_url(j)
-            lines.append(f"\U0001f534 <{url}|{name}> — last failed #{build_num}")
+            lines.append(f"- <{url}|{name}> — last failed #{build_num}")
 
     if recovering:
-        lines.append(f"\U0001f504 Recovering ({len(recovering)}): {', '.join(recovering)}")
+        lines.append(f"\U0001f7e1 Recovering ({len(recovering)})")
 
     if healthy:
-        if len(healthy) <= 6:
-            lines.append(f"✅ Healthy ({len(healthy)}): {', '.join(healthy)}")
-        else:
-            lines.append(f"✅ Healthy ({len(healthy)}): {', '.join(healthy[:6])}, ...")
+        lines.append(f"\U0001f7e2 Healthy ({len(healthy)})")
 
     building = [s["name"] for s in skipped if s.get("reason") == "building"]
     if building:
-        lines.append(f"\U0001f6e0️ Building ({len(building)}): {', '.join(building)}")
+        lines.append(f"\U0001f6e0️ Building ({len(building)})")
 
     msg = "\n".join(lines)
 

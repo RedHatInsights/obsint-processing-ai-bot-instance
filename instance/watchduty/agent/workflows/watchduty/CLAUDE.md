@@ -141,25 +141,27 @@ One message per cycle summarizing all jobs. Format:
 ```
 🚦 *CCX Jenkins Watchduty Report*
 
-✅ Healthy (12): ccx-advisor-ui-prod, ccx-advisor-ui-stage, ...
-🔄 Recovering (1): ccx-fuzzy-stage
-⚡ Isolated blip (1): ccx-external-data-pipeline-prod (#7756)
-
-⚠️ Needs attention:
-🔴 <https://jenkins-csb-insights-qe-main.dno.corp.redhat.com/job/ccx/job/ccx-update-risk-backend-stage/4744/|ccx-update-risk-backend-stage> — consecutive-fail since #4742 (3 builds)
+🔴 Failing:
+- <https://jenkins-csb-insights-qe-main.dno.corp.redhat.com/job/ccx/job/ccx-update-risk-backend-stage/4744/|ccx-update-risk-backend-stage> — consecutive-fail since #4742 (3 builds)
    → Infra: OOM killed in test stage (exit code 137)
-🟡 <https://jenkins-csb-ccx-dev-main.dno.corp.redhat.com/job/internal-pipeline-tests-prod/456/|internal-pipeline-tests-prod> — flapping (4 transitions in 7 builds)
+- <https://jenkins-csb-ccx-dev-main.dno.corp.redhat.com/job/internal-pipeline-tests-prod/456/|internal-pipeline-tests-prod> — flapping (4 transitions in 7 builds)
    → Real issue: endpoint returning 503 (details sent)
+🟡 Recovering (1)
+🟢 Healthy (12)
+⚡ Isolated blip (1): ccx-external-data-pipeline-prod (#7756)
+🛠️ Building (2)
 ```
+
+Follow traffic-light order: 🔴 failing → 🟡 recovering → 🟢 healthy →
+additional info (isolated blips, building, skipped, etc.) at the end.
 
 Rules for the compact message:
 - Use Slack mrkdwn: `*bold*` for titles, emojis for status indicators,
   `<url|label>` for clickable job name hyperlinks
-- Group healthy/recovering/blip jobs on one line each (just names,
-  comma-separated)
-- For failing jobs: make the job name a hyperlink to the latest failed
-  build using `<jenkins-url|job-name>`, then pattern, build range, and
-  a one-line cause
+- Failing jobs go first under "🔴 Failing:" header — list each as
+  `- <jenkins-url|job-name> — pattern, build range, one-line cause`
+- 🟡 Recovering and 🟢 Healthy lines show only the count, no job names
+- Isolated blips, Building, Skipped, etc. go at the end
 - Build the Jenkins link from the job's `instance` field:
   - `qe` → `https://jenkins-csb-insights-qe-main.dno.corp.redhat.com/job/ccx/job/<job-name>/<build>/`
   - `idp` → `https://jenkins-csb-ccx-dev-main.dno.corp.redhat.com/job/<job-name>/<build>/`
