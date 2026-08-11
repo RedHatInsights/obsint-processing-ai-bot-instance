@@ -147,7 +147,19 @@ Based on the verdict and user acknowledgment:
 
 ### Path A: Not Affected
 
-1. Add a comment to the Jira issue via `acli`:
+Before closing, check what image is running in production:
+
+1. **Check production image in app-interface**:
+   - Open the `app-interface` repository
+   - Find the component's saas file or deployment config:
+     ```
+     find data/services/ -name "*.yml" -o -name "*.yaml" | xargs grep -l "<component>"
+     ```
+   - Extract the `ref:` or image tag currently deployed
+
+2. **If production image matches `:latest` or is also not affected**:
+
+   Add a comment to the Jira issue via `acli`:
 
    ```
    acli jira workitem comment create --key {Jira Key} --body '{comment text}'
@@ -167,6 +179,8 @@ Based on the verdict and user acknowledgment:
    - The vulnerable code path ({specific API/module}) is
      not used by this project.
 
+   Production image verified: up to date.
+
    References:
    - {NVD URL}
    - {Language advisory URL}
@@ -175,7 +189,7 @@ Based on the verdict and user acknowledgment:
    No action required.
    ```
 
-2. Transition the issue to **Closed**:
+   Transition the issue to **Closed**:
 
    ```
    acli jira workitem transition --key {Jira Key} --status "Closed" --yes
@@ -183,6 +197,46 @@ Based on the verdict and user acknowledgment:
 
    If "Closed" fails, try "Done" or "Won't Do" as the
    status value. Use `--yes` to skip the confirmation prompt.
+
+3. **If production image is outdated (older ref, may be affected)**:
+
+   Scan the production image to confirm:
+   ```
+   syft quay.io/redhat-services-prod/obsint-processing-tenant/<component>/<component>:<production-ref> --from registry -o json
+   ```
+
+   If the vulnerable package exists at a vulnerable version in the production image:
+
+   a. Create an MR in app-interface to update the image reference to the latest tag:
+      - Push to the app-interface fork (from `project-repos.json`)
+      - `glab mr create --repo service/app-interface`
+      - Title: `Update <component> image to resolve <CVE-ID>`
+      - Description: Include CVE details, production vs latest scan comparison
+
+   b. Add Jira comment:
+      ```
+      **Assessment: Not Affected (latest image)**
+      **Production Image: Outdated — Update Required**
+
+      {CVE-ID} targets {package} versions {range}.
+
+      Latest image: {version or "not present"} — NOT AFFECTED
+      Production image ({production-ref}): {version} — AFFECTED
+
+      The latest built image is clean, but production runs an older
+      image that is still affected.
+
+      Action: Created app-interface MR to update production image.
+      MR: {MR_URL}
+
+      References:
+      - {NVD URL}
+      - {Language advisory URL}
+      - {Upstream fix PR/commit URL}
+      ```
+
+   c. Do NOT close the ticket — transition to "Code Review" instead.
+      The ticket stays open until the production image is updated.
 
 ### Path B: Dependency Bump
 
@@ -221,7 +275,7 @@ Lint/types/tests: passing.
 
 Please add any links or even terminal output, both command and stdout, that would prove your statement is true.
 
-Ask user about Jira transition (same `acli jira workitem transition` command as Path A step 2).
+Do NOT close the ticket yet — proceed to the production image update below.
 
 ### Path C: Code Change (Rare)
 
@@ -230,8 +284,59 @@ Ask user about Jira transition (same `acli jira workitem transition` command as 
    implementing.
 2. Add a Jira comment summarizing the code change
    (`acli jira workitem comment create`).
-3. Ask user about Jira transition
-   (`acli jira workitem transition`).
+
+Do NOT close the ticket yet — proceed to the production image update below.
+
+### Paths B & C: Production Image Update (required before closing)
+
+After the repo PR is merged, the ticket is NOT done until production is also updated.
+The image needs time to build in Konflux and appear in Quay.
+
+1. **Wait for image build**:
+   - After the PR is merged, wait **20 minutes** for the
+     Konflux pipeline to build and push the new image to Quay
+   - Then verify the image is available:
+     ```
+     skopeo inspect docker://quay.io/redhat-services-prod/obsint-processing-tenant/<component>/<component>:latest
+     ```
+   - If the image is not available after 20 minutes, wait
+     another **20 minutes** and check again
+   - If still not available after the second wait (40 minutes
+     total), send a Slack notification and stop:
+     ```
+     ⚠️ CVE {CVE-ID} - Image build timeout
+
+     {Component}: PR merged but new image not available in Quay
+     after 40 minutes. Konflux pipeline may need attention.
+
+     PR: {PR_URL}
+     📋 Jira: {JIRA_URL}
+     ```
+
+2. **Check production image in app-interface**:
+   - Open the `app-interface` repository
+   - Find the component's saas file or deployment config:
+     ```
+     find data/services/ -name "*.yml" -o -name "*.yaml" | xargs grep -l "<component>"
+     ```
+   - Extract the `ref:` or image tag currently deployed
+
+3. **If production already uses the fixed image** (ref matches
+   the merged commit or a newer build):
+   - Ask user about Jira transition to "Closed" or "Done"
+
+4. **If production uses an older image**:
+   - Create an MR in app-interface to update the image
+     reference to the newly built fixed version:
+     - Push to the app-interface fork (from `project-repos.json`)
+     - `glab mr create --repo service/app-interface`
+     - Title: `Update <component> image to fix <CVE-ID>`
+     - Description: Include CVE details, link to merged
+       application PR, grype/syft scan results
+   - Update Jira comment with the MR link
+   - Transition ticket to "Code Review" (not Closed)
+   - Tell the user: ticket stays open until the
+     app-interface MR is merged and production is updated
 
 ## Step 5: Report
 
@@ -267,8 +372,10 @@ fix: resolve {CVE-ID} — {brief description}
   verdict without the user confirming the assessment.
   They may know things the codebase analysis cannot reveal.
 - **Jira transitions** — Path A (Not Affected) transitions
-  automatically to Done/Closed with resolution "Won't Do".
-  For Paths B and C, ask the user which transition to use.
+  to Done/Closed only after verifying production image is
+  also not affected (see Path A step 2-3). For Paths B and C,
+  do NOT close until production image is updated via
+  app-interface MR (see "Production Image Update" section).
 - **Minimal changes** — bump only the affected package,
   not all dependencies.
 - **Verify after every change** — lint, types, and unit

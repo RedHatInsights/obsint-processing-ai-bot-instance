@@ -200,6 +200,71 @@ Team preference is to leave transitive dependencies alone if they are not in the
 - Document all breaking changes and fixes in the PR description
 - If the update is too risky or complex, prefer staying on the current (non-vulnerable) version
 
+### 4b. Production Image Check (when NOT AFFECTED)
+
+When the verdict is **NOT AFFECTED** for the `:latest` image, check what image is actually running in production before closing the ticket.
+
+1. **Find production image in app-interface**:
+   - Ensure the `app-interface` repo is cloned and up to date
+   - Search for the component's saas file or deployment config:
+     ```bash
+     find data/services/ -name "*.yml" -o -name "*.yaml" | xargs grep -l "<component>"
+     ```
+   - Extract the `ref:` or image tag currently deployed in production
+
+2. **Compare production image with latest**:
+   - If the production ref matches the `:latest` image tag → production is up to date
+   - If the production ref is older, scan the production image:
+     ```bash
+     syft quay.io/redhat-services-prod/obsint-processing-tenant/<component>/<component>:<production-ref> --from registry -o json
+     ```
+   - Check if the vulnerable package exists at a vulnerable version in the production image
+
+3. **If production is up to date or also not affected**:
+   - Proceed to close the ticket with the standard NOT AFFECTED comment (section 5)
+   - No further action needed
+
+4. **If production image IS affected (outdated)**:
+   - Create an MR in app-interface to update the image reference to the latest tag
+   - Push to the app-interface fork (configured in `project-repos.json`)
+   - Open MR: `glab mr create --repo service/app-interface`
+   - MR title: `Update <component> image to resolve <CVE-ID>`
+   - MR description: Include CVE details, production vs latest comparison, syft scan proof
+   - Add attribution comment after creation (see PR/MR Attribution section)
+   - Post Jira comment using this template:
+
+     ```
+     **CVE Assessment: NOT AFFECTED (latest image)**
+     **Production Image: OUTDATED — Update Required**
+
+     CVE-YYYY-NNNNN targets {package} versions {range}.
+
+     **Latest image** (`:latest`): {version or "not present"} — NOT AFFECTED
+     **Production image** (`{production-ref}`): {version} — AFFECTED
+
+     The latest built image is outside the vulnerable range, but production
+     is running an older image that is still affected.
+
+     **Action**: Created app-interface MR to update production image.
+     **MR**: {MR_URL}
+
+     **References**:
+     - NVD: {URL}
+     - {Language advisory}: {URL}
+     - Upstream fix: {URL}
+     ```
+   - Transition ticket to "Code Review" (do NOT close — awaiting MR merge)
+   - Send Slack notification:
+     ```
+     🔄 CVE {CVE-ID} - Production image update needed
+
+     {Component}: Latest image not affected, but production runs older image.
+     Created app-interface MR to update.
+
+     🔗 MR: {MR_URL}
+     📋 Jira: {JIRA_URL}
+     ```
+
 ### 5. Document assessment in Jira
 
 **Before any implementation**, post assessment comment with this format:
@@ -230,6 +295,9 @@ No action required.
 - Version is close to or just below vulnerable range, OR
 - Proactive update was attempted and failed (incompatible changes), OR
 - Package is not present at all
+- **AND** the production image check (section 4b) confirms production is up to date or also not affected
+
+If section 4b reveals production is running an outdated image that IS affected, do NOT close the ticket. Instead, create the app-interface MR and transition to "Code Review".
 
 **If AFFECTED**:
 ```
@@ -459,6 +527,7 @@ CVE-YYYY-NNNNN — {brief description of what was changed and why}
 After PR is created and Jira comment posted:
 - Transition ticket to "Code Review" (via `jira_transition_issue`)
 - Update task tracking with `task_update` to `pr_open` status
+- Do NOT close the ticket — proceed to the Production Image Update section below
 
 ### Checking bump recency (before bumping)
 
@@ -516,9 +585,32 @@ If `grype` or `syft` are not installed, skip those scans and note in the PR desc
 
 ---
 
-## Production Image Update (app-interface)
+## Production Image Update (app-interface) — MANDATORY for Paths B & C
 
-After verifying the fix locally, check if the production deployment needs updating:
+**The ticket must NOT be closed until production is also updated.** After the repo PR is merged, follow these steps before transitioning the ticket to Done/Closed.
+
+### Wait for image build
+
+After the PR is merged, the image needs time to build in Konflux and appear in Quay.
+
+1. Wait **20 minutes** after PR merge
+2. Verify the image is available:
+   ```bash
+   skopeo inspect docker://quay.io/redhat-services-prod/obsint-processing-tenant/<component>/<component>:latest
+   ```
+3. If not available, wait another **20 minutes** and check again
+4. If still not available after 40 minutes total, send Slack notification and stop:
+   ```
+   ⚠️ CVE {CVE-ID} - Image build timeout
+
+   {Component}: PR merged but new image not available in Quay
+   after 40 minutes. Konflux pipeline may need attention.
+
+   PR: {PR_URL}
+   📋 Jira: {JIRA_URL}
+   ```
+
+### Check and update production
 
 1. **Check app-interface repo**:
    - Clone or update the `app-interface` repository (must be in `project-repos.json` with `repo:app-interface` label)
@@ -528,7 +620,8 @@ After verifying the fix locally, check if the production deployment needs updati
 2. **Compare with fixed image**:
    - Check if the production image tag includes the CVE fix
    - Look for image references in deployment configs, saas files, or resource templates
-   - If production uses an older image without the fix → needs update
+   - If production already uses the fixed image → transition ticket to "Done"/"Closed"
+   - If production uses an older image without the fix → needs update (continue below)
 
 3. **Create app-interface MR** (if production image outdated):
    - Update the image reference to point to the newly built fixed version
@@ -538,11 +631,13 @@ After verifying the fix locally, check if the production deployment needs updati
    - MR description: Include CVE details, grype scan results, link to application PR
    - Add comment after creation: "Created by Řehoř - requires human approval before merge"
    - Link the MR in the Jira ticket comment
+   - Transition ticket to "Code Review" (NOT Closed — awaiting MR merge)
 
 4. **Important**:
    - App-interface MRs ALWAYS require human review - never auto-merge
    - The MR updates production deployment config - must be carefully reviewed
    - If app-interface is not in `project-repos.json`, skip this step and note in Jira
+   - The ticket stays in "Code Review" until the app-interface MR is merged
 
 ---
 
