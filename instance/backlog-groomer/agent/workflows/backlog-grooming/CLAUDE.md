@@ -83,6 +83,14 @@ For each CVE ticket in the section:
 
    Do NOT remove existing labels. Only add new ones.
 
+4b. **Quarterly fixVersion**: The `02-cve-scan.py` preflight already
+   assigns the current quarter as a fixVersion (e.g. `2026Q3`, derived
+   from today's date) to any CVE ticket that has no `YYYYQ[1-4]`
+   fixVersion yet — existing fixVersions are preserved and an
+   already-planned quarter is never overwritten. No action needed here;
+   note the assigned quarter (shown in the preflight `fixVersions` line)
+   in the report.
+
 5. **Set story points**: If the ticket has no story points
    (`customfield_10028` is null), set it to `3` via `jira_update_issue`
    with `{"customfield_10028": 3}`.
