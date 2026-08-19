@@ -1,15 +1,15 @@
 # obsint-processing-ai-bot-instance
 
-Ctibor is an autonomous developer agent that picks groomed Jira tickets,
+This Rehor instance is an autonomous developer agent that does it all: grooms Jira tickets, picks up work using Jira tickets,
 implements code changes, opens PRs/MRs, and maintains them through the review
-process without human intervention.
+process without human intervention. It can also function without Jira utilising scheduled runs which we use for example to help with watch duty activities such as triaging why tests are failing.
 
 It is an instance of the [platform-frontend-ai-dev](https://github.com/RedHatInsights/platform-frontend-ai-dev)
 framework (codenamed **Rehor**), customized for the CCX Processing team.
 
 For an overview of how Ctibor works (architecture, priority system) and how to
 assign tasks via Jira, see the
-[CCX Docs — Ctibor section](https://ccx.pages.redhat.com/ccx-docs/docs/processing/ctibor/).
+[CCX Docs — agents section](https://ccx.pages.redhat.com/ccx-docs/docs/processing/agents/).
 
 ## Table of Contents
 
@@ -217,7 +217,7 @@ Configures external tool servers the bot can interact with:
 
 ## Deployment
 
-Ctibor is deployed on OpenShift via Konflux CI/CD pipelines, with production
+The agent is deployed on OpenShift via Konflux CI/CD pipelines, with production
 image references managed through app-interface.
 
 ### Build Pipeline
@@ -229,7 +229,6 @@ The build is defined in `.tekton/`:
   ```
   quay.io/redhat-user-workloads/obsint-processing-tenant/obsint-processing-ai-bot-instance/obsint-processing-ai-bot-instance:<revision>
   ```
-  Runs security scans: Clair, Snyk SAST, ClamAV, and others.
 
 - **PR pipeline** — triggers on PRs to `master`. Same build process but images
   expire after 5 days.
@@ -247,25 +246,10 @@ parameters:
 | `BOT_SPRINT_PREFIX` | Sprint naming prefix | `CCXDEV Sprint` |
 | `REPLICAS` | Number of bot replicas | `0` (must be scaled up explicitly) |
 
-The template creates a Deployment and a NetworkPolicy that restricts egress to
-only the proxy, memory server, and OpenShift DNS.
-
 ### Shared Infrastructure
 
 Ctibor connects to shared infrastructure deployed by the primary
-platform-frontend-ai-dev instance:
-
-| Service | Port | Purpose |
-|---------|------|---------|
-| `devbot-proxy` | 3128 | Squid proxy (domain allowlist) |
-| `devbot-proxy` | 9090 | Executor (gRPC policy engine) |
-| `devbot-proxy` | 8443 | Vertex AI auth proxy |
-| `devbot-proxy` | 8444 | Jira MCP (mcp-atlassian) |
-| `devbot-memory-server` | 8080 | Task tracking + RAG memory |
-
-Secrets are sourced from Vault via `devbot-secrets` and include Git identity,
-Jira credentials, and SSO tokens. The bot container itself has **no direct
-access to secrets**.
+platform-frontend-ai-dev instance.
 
 ### App-Interface Deploy File
 
@@ -273,53 +257,4 @@ The app-interface SaaS deploy configuration for Ctibor lives at:
 
 [`data/services/insights/platform-frontend-ai-dev/obsint-deploy.yaml`](https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/data/services/insights/platform-frontend-ai-dev/obsint-deploy.yaml)
 
-This is a `saas-file-2` resource that defines how Ctibor is deployed. Key
-aspects:
-
-- **Namespace:** shares the stage namespace with the primary
-  platform-frontend-ai-dev deployment (`hcmais01ue1`)
-- **Resource template:** points to `deploy/template.yaml` in this repository
-- **Image:** `quay.io/redhat-services-prod/obsint-processing-tenant/obsint-processing-ai-bot-instance/obsint-processing-ai-bot-instance`
-- **Managed resource types:** Deployment, Service, Route, NetworkPolicy,
-  ScaledObject (KEDA)
-
-#### Deploy Parameters
-
-| Parameter | Value |
-|-----------|-------|
-| `BOT_NAME` | `devbot-obsint-processing` |
-| `BOT_LABEL` | `obsint-processing-ai` |
-| `BOT_INSTANCE_ID` | `Ctibor Šťastný z Čachtíc` |
-| `BOT_REPLICAS` | `0` (scaled up explicitly) |
-| `BOT_CONFIG_REPO` | `https://github.com/RedHatInsights/obsint-processing-ai-bot-instance.git` |
-| `BOT_CONFIG_PATH` | `instance/my-config` |
-| `GCP_PROJECT_ID` | `hcc-platform-agentic-sdlc` |
-| `VERTEX_ALLOWED_MODELS` | `claude-sonnet-4-6, claude-opus-4-6, claude-haiku-4-5` |
-
-The `ref` and `BOT_IMAGE_TAG` fields are set to the git commit SHA of the
-deployed version.
-
-### Deploying a New Version
-
-1. **Merge your changes** to the `master` branch of this repository.
-
-2. **Wait for the Konflux push pipeline** to build and push the new image.
-   The image tag will be the git commit SHA.
-
-3. **Update the image reference in app-interface.** Edit the
-   [obsint-deploy.yaml](https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/data/services/insights/platform-frontend-ai-dev/obsint-deploy.yaml)
-   file — update both `ref` and `BOT_IMAGE_TAG` to the new commit SHA and
-   open an MR.
-
-4. **Get the app-interface MR reviewed and merged.** App-interface MRs always
-   require human review and are never auto-merged.
-
-5. **Verify the deployment.** Check the OpenShift pod logs and the memory server
-   dashboard for the bot's next cycle.
-
-## Build
-
-```bash
-git submodule update --init --recursive
-docker build -f dev-bot/Dockerfile.runner -t my-bot-instance:local .
-```
+New versions are deployed automatically, no need to promote the service in app-interface.
