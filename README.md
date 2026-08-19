@@ -11,6 +11,8 @@ For an overview of how Ctibor works (architecture, priority system) and how to
 assign tasks via Jira, see the
 [CCX Docs — agents section](https://ccx.pages.redhat.com/ccx-docs/docs/processing/agents/).
 
+The dashboards are available [here](https://devbot-memory-server-platform-frontend-ai-dev-stage.apps.rosa.hcmais01ue1.s9m2.p3.openshiftapps.com/#/instances).
+
 ## Table of Contents
 
 - [Personas](#personas)
@@ -18,7 +20,6 @@ assign tasks via Jira, see the
 - [Persona vs Skill](#persona-vs-skill)
 - [Configuration](#configuration)
 - [Deployment](#deployment)
-- [Build](#build)
 
 ## Personas
 
