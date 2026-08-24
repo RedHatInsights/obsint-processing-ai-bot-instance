@@ -510,9 +510,26 @@ When creating PRs:
 - PR title should be clear and descriptive, explaining the "why" rather than the "what"
 - No strict conventional commit format required — use descriptive messages
 - Optionally include Jira ticket ID: `[CCXDEV-12345] Description of change`
-- Include a summary of changes and verification steps in the PR body
 - Always commit both `go.mod` and `go.sum` for dependency changes
 - PRs require minimum 2 approvals from maintainers
+
+### PR Template
+
+Before creating a PR, check if the repo has a `PULL_REQUEST_TEMPLATE.md` in the repo root:
+
+```bash
+[ -f PULL_REQUEST_TEMPLATE.md ] && echo "PR template found"
+```
+
+If the template exists:
+1. **Read the template** to understand its structure and required sections
+2. **Fill out every section** of the template with relevant information from your changes
+3. **Do not leave placeholder text** — replace all `<!-- comments -->`, `[TODO]`, or example text with actual content
+4. **Pass the filled template** as the PR body via `gh pr create --body`
+
+Additional sections beyond the template are allowed, but only after all template sections are filled out first.
+
+If no PR template exists, use the default PR body format with a summary of changes and verification steps.
 
 ### Attribution
 
