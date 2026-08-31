@@ -112,8 +112,9 @@ Team preference is to leave transitive dependencies alone if they are not in the
      
      **PR**: {PR_URL}
      ```
-   - Post Slack notification about successful proactive update
-   - Transition ticket to "Code Review"
+   - Wait for CI checks to complete (see "CI Pipeline Verification" section)
+   - If CI passes: post success Slack notification, transition ticket to "Code Review"
+   - If CI fails after 3 attempts: post CI failure Slack notification with details of failing checks
 
 4. **If tests fail**:
    - Attempt to fix breaking changes **ONLY if minimal and safe**
@@ -155,8 +156,9 @@ Team preference is to leave transitive dependencies alone if they are not in the
      
      **PR**: {PR_URL}
      ```
-   - Post Slack notification about successful update with fixes
-   - Transition ticket to "Code Review"
+   - Wait for CI checks to complete (see "CI Pipeline Verification" section)
+   - If CI passes: post success Slack notification, transition ticket to "Code Review"
+   - If CI fails after 3 attempts: post CI failure Slack notification with details of failing checks
 
 6. **If fixes NOT possible** (incompatible breaking changes, architectural limitations):
    - Revert all changes
@@ -658,15 +660,109 @@ This ensures reviewers know the PR/MR was automated and requires human verificat
 
 ---
 
+## CI Pipeline Verification
+
+After creating a PR, **wait for all CI checks to complete** before sending any Slack notification. Do NOT notify Slack immediately after PR creation.
+
+### 1. Monitor CI checks
+
+Poll the PR status until all checks finish:
+
+```bash
+gh pr checks <PR_NUMBER> --watch --fail-fast 2>&1 || true
+```
+
+If `--watch` is not available or times out, poll manually:
+
+```bash
+# Check every 2 minutes, up to 30 minutes
+for i in $(seq 1 15); do
+  STATUS=$(gh pr checks <PR_NUMBER> 2>&1)
+  echo "$STATUS"
+  if echo "$STATUS" | grep -qE "pending|queued|in_progress"; then
+    sleep 120
+  else
+    break
+  fi
+done
+```
+
+### 2. Evaluate CI results
+
+After all checks complete, check for failures:
+
+```bash
+gh pr checks <PR_NUMBER> 2>&1
+```
+
+If **all checks pass** → proceed to Slack notification (success templates below).
+
+If **any check fails** → proceed to investigation (step 3).
+
+### 3. Investigate CI failures
+
+For each failing check:
+
+1. **Get the failure logs**:
+   ```bash
+   # For GitHub Actions
+   gh run view <RUN_ID> --log-failed 2>&1 | tail -100
+   ```
+
+2. **Identify the root cause** — common categories:
+   - **Test failure**: a unit/integration test broke due to the dependency change
+   - **Lint failure**: new version introduces style or type incompatibilities
+   - **Build failure**: API changes, missing exports, or compilation errors
+   - **Flaky/infra failure**: network timeout, runner issue, unrelated to the change
+
+3. **For flaky/infra failures**: proceed to step 4a (retry with cooldown).
+
+### 4. Attempt to fix CI failures (max 3 attempts)
+
+#### 4a. Flaky/infra failures (network timeouts, runner issues, unrelated to the change)
+
+Wait and retry — do NOT attempt code fixes for infra problems:
+
+1. **Wait 30 minutes** before retrying
+2. **Re-trigger the failed check**:
+   ```bash
+   gh run rerun <RUN_ID> --failed 2>&1
+   ```
+3. **Wait for CI to complete again** (repeat from step 1)
+4. Track retry count. After **3 retries** (total ~90 minutes of waiting), stop and notify Slack with infra failure details.
+
+#### 4b. Failures caused by the CVE fix (test/lint/build failures)
+
+If the failure is caused by the dependency change:
+
+1. **Analyze the error** and determine if it's fixable within the allowed scope (see section 4a "Allowed minimal fixes")
+2. **Apply the fix** locally
+3. **Run local tests** to verify: `make test && make lint` (or equivalent for the repo type)
+4. **Push the fix** to the PR branch
+5. **Wait for CI again** (repeat from step 1)
+
+Track attempt count. After **3 failed fix attempts**, stop trying and notify Slack.
+
+### 5. CI outcome determines Slack notification
+
+- **All CI checks pass** (including after retries or fix attempts) → send success Slack notification
+- **CI fails due to the change and fix not possible** → send CI failure Slack notification
+- **CI fails due to infra/flaky reasons after 3 retries** → send infra failure Slack notification with details of the failing checks
+
+---
+
 ## Slack Notifications
 
 Send Slack notifications at key milestones using the `SLACK_WEBHOOK_URL` environment variable.
 
+**IMPORTANT**: For PR-related notifications, only send AFTER all CI checks have completed (see CI Pipeline Verification section above).
+
 **When to notify**:
-1. After successful proactive update with passing tests
-2. After successful update with codebase fixes
-3. When proactive update is blocked by incompatible changes
-4. After PR/MR creation for any CVE fix
+1. After CI passes on a successful proactive update
+2. After CI passes on a successful update with codebase fixes
+3. When proactive update is blocked by incompatible changes (no PR created — notify immediately)
+4. After CI passes on any CVE fix PR
+5. When CI fails on a CVE fix PR and the failure cannot be resolved
 
 **Notification formats**:
 
@@ -720,7 +816,40 @@ Recommendation: Manual review needed for future upgrade planning
 
 {Component}: {package} vulnerability resolved
 Updated: {old_version} → {new_version}
-Status: All tests passing
+Status: All CI checks passing
+
+🔗 PR: {PR_URL}
+📋 Jira: {JIRA_URL}
+```
+
+**CI failure - Change broke tests/build (unfixable)**:
+```
+❌ CVE {CVE-ID} - CI failing on fix PR
+
+{Component}: Updated {package} from {old_version} to {new_version}
+CI checks failing after {N} fix attempts.
+
+Failing checks:
+• {check_name}: {one-line error summary}
+
+Manual intervention required.
+
+🔗 PR: {PR_URL}
+📋 Jira: {JIRA_URL}
+```
+
+**CI failure - Infra/flaky after retries**:
+```
+⚠️ CVE {CVE-ID} - CI infra failure on fix PR
+
+{Component}: Updated {package} from {old_version} to {new_version}
+CI checks failing due to infrastructure issues after 3 retries (~90 min).
+Failure appears unrelated to the CVE fix.
+
+Failing checks:
+• {check_name}: {one-line error summary}
+
+PR is ready but needs CI re-run.
 
 🔗 PR: {PR_URL}
 📋 Jira: {JIRA_URL}
