@@ -36,7 +36,8 @@ Ctibor **dynamically selects** the appropriate persona based on the ticket
 description and the repository's tech stack. For example:
 
 - A repo with `package.json` triggers the frontend persona
-- A repo with `go.mod` triggers a backend persona
+- A repo with `go.mod` triggers the `golang` backend persona
+- A Python backend repo with `pyproject.toml` or Python dependency metadata triggers the `python-backend` persona
 - A CVE ticket triggers the CVE persona
 
 Personas are not hardcoded to specific repositories.
