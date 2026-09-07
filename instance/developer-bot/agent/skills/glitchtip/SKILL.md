@@ -18,13 +18,14 @@ allowed-tools:
 HTTP access to GlitchTip is only possible through this skill. The bot's
 `validate-bash.sh` hook blocks `curl`/`wget` and HTTP one-liners; committed
 script files are allowed. This script uses `urllib` against `GLITCHTIP_API_URL`
-(the `devbot-proxy` GlitchTip reverse proxy on port 8447), which is in `NO_PROXY`
+(the `devbot-proxy` GlitchTip reverse proxy on port 8448 — note 8447 is the
+separate git-auth forward proxy, do not use it), which is in `NO_PROXY`
 so the request goes direct. The proxy adds `Authorization: Bearer <token>` —
 **never pass or log a token.**
 
 ## Environment
 
-- `GLITCHTIP_API_URL` — proxy base URL (default `http://devbot-proxy:8447`).
+- `GLITCHTIP_API_URL` — proxy base URL (default `http://devbot-proxy:8448`).
 - `GLITCHTIP_ORG` — organization slug (default `ccx`).
 
 ## Commands

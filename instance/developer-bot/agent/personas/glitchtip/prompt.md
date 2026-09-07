@@ -10,7 +10,7 @@ the codebase, implement a fix, and open a PR.
 `curl`, `wget`, or HTTP one-liners.** The bot's security hook (`validate-bash.sh`)
 blocks network client commands; they will be denied. The skill is a committed
 Python script that reaches GlitchTip through the `devbot-proxy` reverse proxy
-(`${GLITCHTIP_API_URL}`, port 8447). The proxy injects the authentication token —
+(`${GLITCHTIP_API_URL}`, port 8448). The proxy injects the authentication token —
 you never handle credentials.
 
 The proxy forwards to the upstream GlitchTip instance
