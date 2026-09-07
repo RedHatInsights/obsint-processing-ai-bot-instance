@@ -6,13 +6,24 @@ the codebase, implement a fix, and open a PR.
 
 ## GlitchTip Access
 
-GlitchTip is accessed through the proxy at `${GLITCHTIP_API_URL}`. The proxy
-injects the authentication token — you never handle credentials directly.
+**All GlitchTip API access goes through the `glitchtip` skill — never use
+`curl`, `wget`, or HTTP one-liners.** The bot's security hook (`validate-bash.sh`)
+blocks network client commands; they will be denied. The skill is a committed
+Python script that reaches GlitchTip through the `devbot-proxy` reverse proxy
+(`${GLITCHTIP_API_URL}`, port 8447). The proxy injects the authentication token —
+you never handle credentials.
 
-All API calls go through the proxy using `curl`. The proxy forwards requests to
-the upstream GlitchTip instance (`https://glitchtip.devshift.net`).
+The proxy forwards to the upstream GlitchTip instance
+(`https://glitchtip.devshift.net`).
 
 **Organization:** `ccx`
+
+If the skill exits non-zero with a connection or HTTP error, the proxy is
+unreachable or a prerequisite is missing (Vault `glitchtip-url`/`glitchtip-token`,
+or squid allowlist for `glitchtip.devshift.net`). That is an infrastructure
+problem — **do not** conclude "GlitchTip requires authentication" and do not fall
+back to WebFetch, chrome-devtools, or curl. Report the blocker via Slack with
+`needs_help` and stop.
 
 ## Workflow
 
@@ -29,39 +40,38 @@ If the description contains a direct issue URL, extract the numeric issue ID.
 If it contains a filtered issue list URL, you will need to search for the
 specific error described in the ticket.
 
-### Step 2: Fetch Error Details from GlitchTip API
+### Step 2: Fetch Error Details via the `glitchtip` skill
 
-Use `curl` through the proxy. Do NOT add any `Authorization` header — the proxy
-handles that.
+Use the skill for every call. All commands print JSON to stdout.
 
 #### List issues for the organization
 
 ```bash
-curl -s "${GLITCHTIP_API_URL}/api/0/organizations/ccx/issues/?query=is:unresolved&limit=25" | python3 -m json.tool
+python3 .claude/skills/glitchtip/glitchtip.py list --limit 25
 ```
 
 #### Get a specific issue by ID
 
 ```bash
-curl -s "${GLITCHTIP_API_URL}/api/0/issues/<issue-id>/" | python3 -m json.tool
+python3 .claude/skills/glitchtip/glitchtip.py issue <issue-id>
 ```
 
 #### Get the latest event for an issue (contains full stacktrace)
 
 ```bash
-curl -s "${GLITCHTIP_API_URL}/api/0/issues/<issue-id>/events/latest/" | python3 -m json.tool
+python3 .claude/skills/glitchtip/glitchtip.py latest <issue-id>
 ```
 
 #### List events for an issue (multiple occurrences)
 
 ```bash
-curl -s "${GLITCHTIP_API_URL}/api/0/issues/<issue-id>/events/" | python3 -m json.tool
+python3 .claude/skills/glitchtip/glitchtip.py events <issue-id> --limit 10
 ```
 
 #### Filter issues by project
 
 ```bash
-curl -s "${GLITCHTIP_API_URL}/api/0/organizations/ccx/issues/?project=<project-id>&query=is:unresolved" | python3 -m json.tool
+python3 .claude/skills/glitchtip/glitchtip.py list --project <project-id> --query "is:unresolved"
 ```
 
 ### Step 3: Analyze the Error
@@ -285,7 +295,7 @@ GlitchTip error before closing the ticket.
 3. **Check for new events** — after the observation window, query GlitchTip
    for new events on the issue:
    ```bash
-   curl -s "${GLITCHTIP_API_URL}/api/0/issues/<issue-id>/events/?limit=5" | python3 -m json.tool
+   python3 .claude/skills/glitchtip/glitchtip.py events <issue-id> --limit 5
    ```
    Compare the `dateCreated` of the most recent event with the deployment
    timestamp. If no new events occurred after deployment, the fix is
@@ -293,9 +303,7 @@ GlitchTip error before closing the ticket.
 
 4. **If fix confirmed** — resolve the GlitchTip issue:
    ```bash
-   curl -s -X PUT "${GLITCHTIP_API_URL}/api/0/issues/<issue-id>/" \
-     -H "Content-Type: application/json" \
-     -d '{"status": "resolved"}'
+   python3 .claude/skills/glitchtip/glitchtip.py resolve <issue-id>
    ```
    Post a confirmation comment on the Jira ticket:
    ```
@@ -320,7 +328,10 @@ GlitchTip error before closing the ticket.
 
 ## Constraints
 
-- **Never hardcode or log tokens.** All auth goes through the proxy.
+- **Never hardcode or log tokens.** All auth goes through the proxy via the
+  `glitchtip` skill.
+- **Never use `curl`, `wget`, WebFetch, or chrome-devtools for GlitchTip.** They
+  are blocked or cannot authenticate. The `glitchtip` skill is the only channel.
 - **Minimal changes.** Fix the specific error — do not refactor surrounding code.
 - **Verify after every change.** Lint and tests must pass before declaring done.
 - **Check deployment version.** The error may come from an older deployed version.
