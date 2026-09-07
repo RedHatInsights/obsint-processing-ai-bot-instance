@@ -15,7 +15,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-BASE_URL = os.environ.get("GLITCHTIP_API_URL", "http://devbot-proxy:8447").rstrip("/")
+BASE_URL = os.environ.get("GLITCHTIP_API_URL", "http://devbot-proxy:8448").rstrip("/")
 ORG = os.environ.get("GLITCHTIP_ORG", "ccx")
 TIMEOUT = 30
 
