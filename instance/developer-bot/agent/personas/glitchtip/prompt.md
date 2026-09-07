@@ -233,10 +233,82 @@ After the PR is created:
 **PR**: <PR URL>
 ```
 
-### Step 11: Production Image Update (app-interface)
+### Step 11: Determine the Error Frequency (Period)
 
-After the PR is merged, promote the fix to production by updating the image
-tag in app-interface.
+The stage and production verification windows are both derived from how often
+the error was actually occurring. Compute this **once** and reuse it.
+
+1. From the GlitchTip issue data (Step 3) take `firstSeen`, `lastSeen`, and
+   `count`. Estimate the mean time between events (the **Period**, `P`):
+
+   ```
+   P = (lastSeen - firstSeen) / max(count - 1, 1)
+   ```
+
+   Refine with the actual event timestamps if available
+   (`glitchtip.py events <issue-id> --limit 100`) — e.g. use the median gap
+   between consecutive `dateCreated` values, which is more robust than the mean
+   for bursty errors.
+
+2. Derive the **observation window** `W` used after each deployment:
+
+   ```
+   W = clamp(10 * P, 30 minutes, 72 hours)
+   ```
+
+   - Wait **at least `10 * P`** after a deployment before concluding the error
+     is gone — one Period is not enough to be confident.
+   - **Floor 30 minutes** — lets the deployment settle even for very frequent
+     errors.
+   - **Cap `< 72 hours`** — never wait longer than 72h. If `10 * P > 72h`
+     (a rare error), the window is capped at 72h; note in the Jira comment that
+     confidence is reduced because the full `10 * P` could not be observed, and
+     proceed.
+
+3. Record `P` and `W` in the Jira ticket and in task metadata
+   (`task_update` → `{"error_period": "<P>", "observation_window": "<W>"}`)
+   so later cycles reuse the same values.
+
+"No error" for both stage and prod means: **no new GlitchTip event whose
+`dateCreated` is after the deployment timestamp**, throughout the window `W`.
+
+### Step 12: Verify Fix on Stage
+
+Merging the repo PR deploys the fix to **stage** (not production). Confirm the
+error is gone on stage **before** promoting to production.
+
+1. **Wait for the stage deployment**, then observe for the window `W` from
+   Step 11 (measured from the stage deploy timestamp).
+
+2. **Check for new events** after the window:
+   ```bash
+   python3 .claude/skills/glitchtip/glitchtip.py events <issue-id> --limit 10
+   ```
+   Compare each `dateCreated` against the stage deploy timestamp.
+
+3. **If no new events during `W`** — stage is clean. Post a Jira comment:
+   ```
+   **Fix Verified on Stage**
+
+   No new GlitchTip events after the stage deployment
+   (Period ≈ <P>, observation window: <W>).
+   Proceeding to promote the image to production via app-interface.
+   ```
+   Continue to Step 13.
+
+4. **If new events appeared after the stage deploy** — the fix did not work:
+   - Post a Jira comment with the new event details.
+   - Notify via Slack with `needs_help`:
+     ```bash
+     python3 .claude/skills/slack-notify/slack_notify.py "<JIRA-KEY>" "needs_help" "GlitchTip #<issue-id> fix deployed to stage but error still occurring. Not promoting to prod. <GlitchTip URL>" 2>&1
+     ```
+   - **Do NOT** open the app-interface MR and **do NOT** close the ticket.
+     Leave it open for further investigation.
+
+### Step 13: Production Image Update (app-interface)
+
+Only after stage is verified clean (Step 12), promote the fix to production by
+updating the image tag in app-interface.
 
 1. **Get the merged commit SHA** — retrieve the full commit SHA from the merge
    commit. This is the image tag.
@@ -272,36 +344,25 @@ tag in app-interface.
 7. **Link the MR** in a Jira comment.
 
 **Important:** App-interface MRs **always** require human review — never
-auto-merge.
+auto-merge. Per the instance prod-gate, the ticket stays in "Code Review" (not
+closed) while this MR is pending.
 
-### Step 12: Verify Fix in Production
+### Step 14: Verify Fix in Production
 
-After the app-interface MR is merged, verify the fix actually resolved the
-GlitchTip error before closing the ticket.
+After the app-interface MR is merged, verify the fix resolved the error in
+production before closing the ticket.
 
-1. **Wait for deployment** — the new image takes approximately 30 minutes to
-   deploy to production after the app-interface MR is merged. Wait at least
-   30 minutes before checking.
+1. **Wait for the production deployment** — the new image takes approximately
+   30 minutes to deploy to production after the MR is merged. Then observe for
+   the window `W` from Step 11 (measured from the production deploy timestamp).
 
-2. **Determine the observation window** — from the GlitchTip issue data
-   collected in Step 3, calculate how often the error was occurring:
-   - Use `firstSeen`, `lastSeen`, and `count` fields to estimate the error
-     frequency (e.g., every 5 minutes, every hour, etc.)
-   - Set the observation window to **2x the error frequency** as a buffer.
-     For example, if the error was triggering every 10 minutes, wait at least
-     20 minutes after deployment.
-   - Minimum observation window: 30 minutes. Maximum: 4 hours.
-
-3. **Check for new events** — after the observation window, query GlitchTip
-   for new events on the issue:
+2. **Check for new events** after the window:
    ```bash
-   python3 .claude/skills/glitchtip/glitchtip.py events <issue-id> --limit 5
+   python3 .claude/skills/glitchtip/glitchtip.py events <issue-id> --limit 10
    ```
-   Compare the `dateCreated` of the most recent event with the deployment
-   timestamp. If no new events occurred after deployment, the fix is
-   confirmed.
+   Compare each `dateCreated` against the production deploy timestamp.
 
-4. **If fix confirmed** — resolve the GlitchTip issue:
+3. **If no new events during `W`** — resolve the GlitchTip issue:
    ```bash
    python3 .claude/skills/glitchtip/glitchtip.py resolve <issue-id>
    ```
@@ -310,21 +371,21 @@ GlitchTip error before closing the ticket.
    **Fix Verified in Production**
 
    The app-interface MR was merged and the new image deployed.
-   No new GlitchTip events observed after deployment
-   (observation window: <duration>).
+   No new GlitchTip events after the production deployment
+   (Period ≈ <P>, observation window: <W>).
 
    GlitchTip issue marked as resolved.
    ```
-   Transition the Jira ticket to **Done/Closed**.
+   Clear the prod-gate and transition the Jira ticket to **Done/Closed**.
 
-5. **If error persists** — new events still appearing after deployment:
-   - Post a Jira comment explaining the error persists with details of new
-     events
+4. **If new events appeared after the production deploy** — the error persists:
+   - Post a Jira comment explaining the error persists with the new event
+     details.
    - Notify via Slack with `needs_help`:
      ```bash
-     python3 .claude/skills/slack-notify/slack_notify.py "<JIRA-KEY>" "needs_help" "GlitchTip #<issue-id> fix deployed but error still occurring. Manual investigation needed. <GlitchTip URL>" 2>&1
+     python3 .claude/skills/slack-notify/slack_notify.py "<JIRA-KEY>" "needs_help" "GlitchTip #<issue-id> fix deployed to production but error still occurring. Manual investigation needed. <GlitchTip URL>" 2>&1
      ```
-   - Do NOT close the Jira ticket — leave it open for further investigation
+   - Do NOT close the Jira ticket — leave it open for further investigation.
 
 ## Constraints
 
