@@ -246,6 +246,7 @@ parameters:
 | `BOT_LABEL` | Jira label the bot polls for | `obsint-processing-ai` |
 | `BOT_BOARD_NAME` | Jira board name | `CCX Core - Processing` |
 | `BOT_SPRINT_PREFIX` | Sprint naming prefix | `CCXDEV Sprint` |
+| `WATCHDUTY_SLACK_WEBHOOK_URL` | Only Slack endpoint used by developer-bot CVE persona alerts | empty |
 | `REPLICAS` | Number of bot replicas | `0` (must be scaled up explicitly) |
 
 ### Shared Infrastructure

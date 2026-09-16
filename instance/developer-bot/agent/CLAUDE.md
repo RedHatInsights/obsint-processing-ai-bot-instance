@@ -9,6 +9,10 @@ not be closed/wrapped up until production is updated.**
 When a PR is `MERGED` (Priority 1 "PR merged" and Priority 1.5 triage), before
 invoking `/wrap-up`:
 
+For CVE tickets, reload `personas/cve/prompt.md` before every `/wrap-up`,
+including Priority 1.5. Use its WatchDuty-only notification and helper invocation
+rules so post-merge bookkeeping does not send a classic Slack message.
+
 - **CVE ticket OR `repo:app-interface` label present** → do NOT `/wrap-up` yet:
   - No app-interface MR yet → follow **Production Image Update (app-interface)**
     in `personas/cve/prompt.md` (wait for Konflux build → check app-interface

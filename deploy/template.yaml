@@ -35,6 +35,8 @@ parameters:
   required: true
 - name: SLACK_WEBHOOK_URL
   value: ""
+- name: WATCHDUTY_SLACK_WEBHOOK_URL
+  value: ""
 - name: KEDA_TIMEZONE
   value: "Europe/Prague"
 - name: KEDA_CRON_START
@@ -157,6 +159,9 @@ objects:
           # Slack notifications
           - name: SLACK_WEBHOOK_URL
             value: ${SLACK_WEBHOOK_URL}
+          # WatchDuty channel for all developer-bot CVE persona alerts
+          - name: WATCHDUTY_SLACK_WEBHOOK_URL
+            value: ${WATCHDUTY_SLACK_WEBHOOK_URL}
           # Proxy — shared pod deployed by platform-frontend-ai-dev
           - name: PROXY_HOST
             value: devbot-proxy
