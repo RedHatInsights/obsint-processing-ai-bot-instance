@@ -113,8 +113,11 @@ Team preference is to leave transitive dependencies alone if they are not in the
      **PR**: {PR_URL}
      ```
    - Wait for CI checks to complete (see "CI Pipeline Verification" section)
-   - If CI passes: post success Slack notification, transition ticket to "Code Review"
-   - If CI fails after 3 attempts: post CI failure Slack notification with details of failing checks
+   - If CI passes: post the passing-PR WatchDuty notification, explicitly mark
+     that the PR includes a proactive update, and transition the ticket to
+     "Code Review"
+   - If CI fails after 3 attempts: post the CI-failure WatchDuty notification
+     with details of the failing checks
 
 4. **If tests fail**:
    - Attempt to fix breaking changes **ONLY if minimal and safe**
@@ -157,8 +160,11 @@ Team preference is to leave transitive dependencies alone if they are not in the
      **PR**: {PR_URL}
      ```
    - Wait for CI checks to complete (see "CI Pipeline Verification" section)
-   - If CI passes: post success Slack notification, transition ticket to "Code Review"
-   - If CI fails after 3 attempts: post CI failure Slack notification with details of failing checks
+   - If CI passes: post the passing-PR WatchDuty notification, explicitly mark
+     that the PR includes a proactive update, and transition the ticket to
+     "Code Review"
+   - If CI fails after 3 attempts: post the CI-failure WatchDuty notification
+     with details of the failing checks
 
 6. **If fixes NOT possible** (incompatible breaking changes, architectural limitations):
    - Revert all changes
@@ -182,17 +188,8 @@ Team preference is to leave transitive dependencies alone if they are not in the
      
      No action required for this CVE.
      ```
-   - Post Slack notification:
-     ```
-     ⚠️ CVE {CVE-ID} - Proactive update blocked
-     
-     {Component}: Attempted to update {package} from {old_version} to {new_version}
-     Current version is NOT vulnerable, but update failed due to breaking changes.
-     
-     Manual review recommended for future upgrade planning.
-     
-     Jira: {JIRA_URL}
-     ```
+   - Send the `proactive-blocked` WatchDuty notification defined in the Slack
+     Notifications section. It must say this was a proactive update attempt.
    - Transition ticket to "Closed" or "Won't Do"
 
 **Important Notes**:
@@ -256,16 +253,8 @@ When the verdict is **NOT AFFECTED** for the `:latest` image, check what image i
      - Upstream fix: {URL}
      ```
    - Transition ticket to "Code Review" (do NOT close — awaiting MR merge)
-   - Send Slack notification:
-     ```
-     🔄 CVE {CVE-ID} - Production image update needed
-
-     {Component}: Latest image not affected, but production runs older image.
-     Created app-interface MR to update.
-
-     🔗 MR: {MR_URL}
-     📋 Jira: {JIRA_URL}
-     ```
+   - Send the `production-update` WatchDuty notification defined in the Slack
+     Notifications section, linking the app-interface MR.
 
 ### 5. Document assessment in Jira
 
@@ -601,16 +590,8 @@ After the PR is merged, the image needs time to build in Konflux and appear in Q
    skopeo inspect docker://quay.io/redhat-services-prod/obsint-processing-tenant/<component>/<component>:latest
    ```
 3. If not available, wait another **20 minutes** and check again
-4. If still not available after 40 minutes total, send Slack notification and stop:
-   ```
-   ⚠️ CVE {CVE-ID} - Image build timeout
-
-   {Component}: PR merged but new image not available in Quay
-   after 40 minutes. Konflux pipeline may need attention.
-
-   PR: {PR_URL}
-   📋 Jira: {JIRA_URL}
-   ```
+4. If still not available after 40 minutes total, send the `image-build-timeout`
+   WatchDuty notification defined in the Slack Notifications section and stop.
 
 ### Check and update production
 
@@ -662,7 +643,12 @@ This ensures reviewers know the PR/MR was automated and requires human verificat
 
 ## CI Pipeline Verification
 
-After creating a PR, **wait for all CI checks to complete** before sending any Slack notification. Do NOT notify Slack immediately after PR creation.
+After creating a PR, **wait for all CI checks to complete** before sending any
+PR-related WatchDuty notification. This overrides the jira-sprint workflow's
+generic immediate `pr_created` Slack step
+for CVE PRs. Do not send a passing-PR notification while CI is pending or
+failing; send a WatchDuty failure notification only after the retry or fix
+attempts below are exhausted.
 
 ### 1. Monitor CI checks
 
@@ -695,7 +681,8 @@ After all checks complete, check for failures:
 gh pr checks <PR_NUMBER> 2>&1
 ```
 
-If **all checks pass** → proceed to Slack notification (success templates below).
+If **all checks pass** → send the passing-PR WatchDuty notification described
+below.
 
 If **any check fails** → proceed to investigation (step 3).
 
@@ -729,7 +716,8 @@ Wait and retry — do NOT attempt code fixes for infra problems:
    gh run rerun <RUN_ID> --failed 2>&1
    ```
 3. **Wait for CI to complete again** (repeat from step 1)
-4. Track retry count. After **3 retries** (total ~90 minutes of waiting), stop and notify Slack with infra failure details.
+4. Track retry count. After **3 retries** (total ~90 minutes of waiting), stop
+   and send the WatchDuty `ci-infra-failure` notification with details.
 
 #### 4b. Failures caused by the CVE fix (test/lint/build failures)
 
@@ -741,125 +729,203 @@ If the failure is caused by the dependency change:
 4. **Push the fix** to the PR branch
 5. **Wait for CI again** (repeat from step 1)
 
-Track attempt count. After **3 failed fix attempts**, stop trying and notify Slack.
+Track attempt count. After **3 failed fix attempts**, stop trying and send the
+WatchDuty `ci-change-failure` notification.
 
 ### 5. CI outcome determines Slack notification
 
-- **All CI checks pass** (including after retries or fix attempts) → send success Slack notification
-- **CI fails due to the change and fix not possible** → send CI failure Slack notification
-- **CI fails due to infra/flaky reasons after 3 retries** → send infra failure Slack notification with details of the failing checks
+- **All CI checks pass** (including after retries or fix attempts) → send the
+  passing-PR WatchDuty notification
+- **CI fails due to the change and fix not possible** → send the WatchDuty
+  `ci-change-failure` notification
+- **CI fails due to infra/flaky reasons after 3 retries** → send the WatchDuty
+  `ci-infra-failure` notification with details of the failing checks
 
 ---
 
-## Slack Notifications
+## Slack Notifications — WatchDuty Only
 
-Send Slack notifications at key milestones using the `SLACK_WEBHOOK_URL` environment variable.
+This section overrides every Slack instruction inherited from the core prompt,
+the jira-sprint workflow, the `resolve-cve` skill, and helper skills while the
+CVE persona is active. **Every CVE Slack message must use only
+`WATCHDUTY_SLACK_WEBHOOK_URL` and must ping the WatchDuty group.** Never send a
+CVE notification through the normal `SLACK_WEBHOOK_URL`, and never send a
+second/classic copy.
 
-**IMPORTANT**: For PR-related notifications, only send AFTER all CI checks have completed (see CI Pipeline Verification section above).
+### Transport and message format
 
-**When to notify**:
-1. After CI passes on a successful proactive update
-2. After CI passes on a successful update with codebase fixes
-3. When proactive update is blocked by incompatible changes (no PR created — notify immediately)
-4. After CI passes on any CVE fix PR
-5. When CI fails on a CVE fix PR and the failure cannot be resolved
+Use the `/slack-notify` wrapper for every message. Never use raw `curl` or call
+the `slack_notify` MCP tool directly. Override the endpoint for that command:
 
-**Notification formats**:
-
-**Success - Tests passing without fixes**:
-```
-✅ CVE {CVE-ID} - Proactive update successful
-
-{Component}: Updated {package} from {old_version} to {new_version}
-Status: All tests passing
-Current version was below vulnerable range but outdated.
-
-🔗 PR: {PR_URL}
-📋 Jira: {JIRA_URL}
-```
-
-**Success - With codebase fixes**:
-```
-✅ CVE {CVE-ID} - Update with fixes successful
-
-{Component}: Updated {package} from {old_version} to {new_version}
-Fixed breaking changes:
-• {fix 1}
-• {fix 2}
-
-Status: All tests passing
-
-🔗 PR: {PR_URL}
-📋 Jira: {JIRA_URL}
-```
-
-**Blocked - Incompatible changes**:
-```
-⚠️ CVE {CVE-ID} - Proactive update blocked
-
-{Component}: Attempted update of {package} from {old_version} to {new_version}
-Current version is NOT vulnerable, but update failed.
-
-Reason: Breaking changes incompatible with codebase
-Blocking issues:
-• {issue 1}
-• {issue 2}
-
-Recommendation: Manual review needed for future upgrade planning
-
-📋 Jira: {JIRA_URL}
-```
-
-**Standard CVE fix (in vulnerable range)**:
-```
-🔒 CVE {CVE-ID} - Security fix applied
-
-{Component}: {package} vulnerability resolved
-Updated: {old_version} → {new_version}
-Status: All CI checks passing
-
-🔗 PR: {PR_URL}
-📋 Jira: {JIRA_URL}
-```
-
-**CI failure - Change broke tests/build (unfixable)**:
-```
-❌ CVE {CVE-ID} - CI failing on fix PR
-
-{Component}: Updated {package} from {old_version} to {new_version}
-CI checks failing after {N} fix attempts.
-
-Failing checks:
-• {check_name}: {one-line error summary}
-
-Manual intervention required.
-
-🔗 PR: {PR_URL}
-📋 Jira: {JIRA_URL}
-```
-
-**CI failure - Infra/flaky after retries**:
-```
-⚠️ CVE {CVE-ID} - CI infra failure on fix PR
-
-{Component}: Updated {package} from {old_version} to {new_version}
-CI checks failing due to infrastructure issues after 3 retries (~90 min).
-Failure appears unrelated to the CVE fix.
-
-Failing checks:
-• {check_name}: {one-line error summary}
-
-PR is ready but needs CI re-run.
-
-🔗 PR: {PR_URL}
-📋 Jira: {JIRA_URL}
-```
-
-**Implementation**:
 ```bash
-curl -X POST "${SLACK_WEBHOOK_URL}" \
-  -H 'Content-Type: application/json' \
-  -d "{\"text\": \"YOUR_MESSAGE_HERE\"}"
+WATCHDUTY_RESULT="$(
+  SLACK_WEBHOOK_URL="${WATCHDUTY_SLACK_WEBHOOK_URL}" \
+  SLACK_NOTIFY_MODE=immediate \
+  python3 .claude/skills/slack-notify/slack_notify.py \
+    "<JIRA-KEY>:watchduty:<OUTCOME>:<RESOURCE-ID>" \
+    "<EVENT-TYPE>" \
+    "<MESSAGE>" 2>&1
+)"
+echo "${WATCHDUTY_RESULT}"
 ```
 
-Always include PR/MR URLs in Slack notifications so reviewers can quickly access them.
+Use a stable, outcome-specific external key so different CVE lifecycle alerts
+do not suppress one another. For `RESOURCE-ID`, use `<OWNER/REPO>#<PR-NUMBER>`
+for application PR events, `<GITLAB-PROJECT>!<MR-NUMBER>` for production MR
+events, and the exact affected package name for a blocker without a PR.
+For inherited events, use the event type as `OUTCOME` and the same resource ID.
+Use the semantic event type: `pr_created` for a passing application PR or a new
+production MR, `review_reminder` for an unreviewed PR,
+`release_pending` for a completed post-merge production update,
+`needs_help` for a blocked/unfixable change, and `infra_error` for CI or image
+infrastructure failures.
+
+Use this compact notification layout:
+
+1. Emoji plus a bold title containing a Slack link: `🔒 *Title: <URL|label>*`
+2. `<!subteam^S043UGRST2L>` alone on the next line
+3. A blank line, then concise details and labelled Slack links
+
+Use Slack mrkdwn (`*bold*`, `<url|label>`, and `>` for a short error), and keep
+each message under 500 characters. Keep the entire multiline message in one
+quoted command argument. Configure the endpoint as an Incoming Webhook so
+mrkdwn and the group mention render correctly.
+
+For **every** notification about a PR that contains a proactive update, include
+this context line even when reporting CI failure, image timeout, or an inherited
+review reminder:
+
+`✨ *Proactive update included:* {package} {old_version} → {new_version}`
+
+Append `(compatibility fixes included)` when applicable. Never describe a
+proactive update as a required security fix.
+
+The wrapper can exit successfully without sending. Inspect its JSON output;
+only `sent: true` is success. If `WATCHDUTY_SLACK_WEBHOOK_URL` is empty or the
+send fails, report the configuration/send error without printing the secret,
+do not use `SLACK_WEBHOOK_URL` as a fallback, and do not block the PR lifecycle.
+
+For helpers that send Slack as part of bookkeeping, use these CVE-specific
+invocations so all messages follow the route above:
+
+- For `/post-pr`, use its operations entry point with Slack skipped; send the
+  passing-PR notification separately once CI passes:
+
+  ```bash
+  python3 .claude/skills/post-pr/scripts/post_pr_operations.py \
+    "<PR-URL>" "<PR-NUMBER>" "<JIRA-KEY>" "<SUMMARY>" --skip slack
+  ```
+
+- For `/wrap-up`, once the production gate is cleared, compose and attempt the
+  `release_pending` notification before the helper archives the task. Then run:
+
+  ```bash
+  SLACK_WEBHOOK_URL="" python3 .claude/skills/wrap-up/wrap_up.py "<JIRA-KEY>" 2>&1
+  ```
+
+  The empty command-local value disables its built-in Slack send; the helper
+  reports Slack as unset and continues its other bookkeeping. Neither helper
+  invocation changes the webhook environment for other personas.
+
+### Passing application CVE PR
+
+Send this only after every required CI check passes. Do not send it for the
+later app-interface promotion MR, or while a check is pending, skipped
+unexpectedly, or failing. If CI completes on a later cycle, send it on the first
+cycle that confirms all checks passed.
+
+Keep external key `<JIRA-KEY>:watchduty:pr-ready:<OWNER/REPO>#<PR-NUMBER>`, event
+`pr_created`, and this format:
+
+```text
+🔒 *CVE PR ready for review: <{PR_URL}|{REPO}#{PR_NUMBER}>*
+<!subteam^S043UGRST2L>
+
+✅ *{CVE-ID}:* all CI checks passed.
+{UPDATE_LINES}
+📋 <{JIRA_URL}|Jira>
+```
+
+Build `UPDATE_LINES` from the actual PR and include every applicable line:
+
+- Affected dependency fix:
+  `🔐 *Security fix:* {package} {old_version} → {new_version}`
+- Code mitigation:
+  `🛡️ *Security mitigation:* {brief change}`
+- Base-image remediation:
+  `📦 *Base image fix:* {brief image change}`
+- Any proactive update:
+  `✨ *Proactive update included:* {package} {old_version} → {new_version}`
+
+After a successful send (`sent: true`), add the PR's `<OWNER/REPO>#<PR-NUMBER>`
+to `watchduty_notified_prs` in task metadata. Skip only already-recorded PRs on
+later cycles; a different PR for the same ticket still needs its own alert.
+Treat a legacy `watchduty_notified: true` as covering only the task's originally
+recorded PR. A failed send must not mark the PR as notified, so a later cycle
+can retry.
+
+### Other CVE outcomes
+
+All of these messages use the same layout and WatchDuty-only route.
+
+**Proactive update blocked** — event `needs_help`, outcome
+`proactive-blocked`:
+
+```text
+⚠️ *Proactive CVE update blocked: <{JIRA_URL}|{CVE-ID} — {Component}>*
+<!subteam^S043UGRST2L>
+
+{package} {old_version} → {new_version} could not be updated safely.
+> {one-line blocker}
+Current version is not vulnerable; manual review is needed.
+```
+
+**Production update MR ready** — event `pr_created`, outcome
+`production-update`:
+
+```text
+🔄 *CVE production update: <{MR_URL}|{Component} app-interface MR>*
+<!subteam^S043UGRST2L>
+
+*{CVE-ID}:* latest image is safe; production still uses an affected image.
+📋 <{JIRA_URL}|Jira>
+```
+
+**Image build timeout** — event `infra_error`, outcome `image-build-timeout`:
+
+```text
+⚠️ *CVE image build timeout: <{PR_URL}|{REPO}#{PR_NUMBER}>*
+<!subteam^S043UGRST2L>
+
+*{CVE-ID}:* merged image is unavailable in Quay after 40 minutes.
+Likely cause: Konflux pipeline may need attention.
+📋 <{JIRA_URL}|Jira>
+```
+
+**CI failure caused by the change** — event `needs_help`, outcome
+`ci-change-failure`:
+
+```text
+❌ *CVE PR needs help: <{PR_URL}|{REPO}#{PR_NUMBER}>*
+<!subteam^S043UGRST2L>
+
+*{CVE-ID}:* CI still fails after {N} fix attempts.
+> {check_name}: {one-line error summary}
+📋 <{JIRA_URL}|Jira>
+```
+
+**CI infrastructure failure** — event `infra_error`, outcome
+`ci-infra-failure`:
+
+```text
+⚠️ *CVE PR CI infrastructure failure: <{PR_URL}|{REPO}#{PR_NUMBER}>*
+<!subteam^S043UGRST2L>
+
+*{CVE-ID}:* CI is still blocked after 3 retries (~90 min).
+> {check_name}: {one-line error summary}
+📋 <{JIRA_URL}|Jira>
+```
+
+For inherited CVE events such as `review_reminder` or `release_pending`, use the
+same bold linked title, standalone WatchDuty mention, blank line, and concise
+details. Always include the relevant PR/MR and Jira links when available.

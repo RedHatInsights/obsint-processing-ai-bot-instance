@@ -301,17 +301,11 @@ The image needs time to build in Konflux and appear in Quay.
      ```
    - If the image is not available after 20 minutes, wait
      another **20 minutes** and check again
-   - If still not available after the second wait (40 minutes
-     total), send a Slack notification and stop:
-     ```
-     ⚠️ CVE {CVE-ID} - Image build timeout
-
-     {Component}: PR merged but new image not available in Quay
-     after 40 minutes. Konflux pipeline may need attention.
-
-     PR: {PR_URL}
-     📋 Jira: {JIRA_URL}
-     ```
+   - If still not available after the second wait (40 minutes total), send the
+     `image-build-timeout` notification through the CVE persona's WatchDuty-only
+     Slack route and stop. Use the `/slack-notify` wrapper with
+     `WATCHDUTY_SLACK_WEBHOOK_URL`, include `<!subteam^S043UGRST2L>`, and never
+     fall back to the normal Slack webhook.
 
 2. **Check production image in app-interface**:
    - Open the `app-interface` repository
