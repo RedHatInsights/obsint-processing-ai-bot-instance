@@ -834,7 +834,7 @@ later app-interface promotion MR, or while a check is pending, skipped
 unexpectedly, or failing. If CI completes on a later cycle, send it on the first
 cycle that confirms all checks passed.
 
-Keep external key `<JIRA-KEY>:watchduty-pr:<REPO>#<PR-NUMBER>`, event
+Keep external key `<JIRA-KEY>:watchduty:pr-ready:<OWNER/REPO>#<PR-NUMBER>`, event
 `pr_created`, and this format:
 
 ```text
