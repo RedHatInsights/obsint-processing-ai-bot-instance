@@ -99,6 +99,31 @@ instances:
 | `/slack-notify` | Posts notifications to Slack (48h cooldown per ticket) |
 | `/auto-fork` | Auto-forks repos under the bot account |
 
+### Local CI Gate Skill
+
+The developer-bot's local [`/wait-for-ci`](instance/developer-bot/agent/skills/wait-for-ci/SKILL.md)
+checks GitHub application PRs using the runner's existing proxy-backed `gh`
+client. It requires no credentials in the agent. Completed skipped jobs count as
+passing; pending, missing, or failed checks still prevent a passing notification.
+Running CI defers review notifications; unavailable verification sends a distinct
+WatchDuty review request marked **CI unverified**. Passing messages require a
+successful gate with two matching green observations, 30 seconds apart. Pending
+checks return immediately; Rehor's task metadata and instance preflight schedule
+the next check or retry cooldown, even when built-in triage skips clean requests.
+There is no long polling loop inside the agent's time-limited session. Missing
+checks get one scheduled grace period before an unverified review request.
+
+App-interface is the only configured GitLab repository. Its production-promotion
+MR sends the `production-update` review request immediately after creation, with
+the WatchDuty mention, without waiting for GitLab CI. Human review and merge
+are still required before the production workflow can complete.
+
+Run its offline regression tests with:
+
+```bash
+python3 -m unittest discover -s instance/developer-bot/agent/skills/wait-for-ci/tests -v
+```
+
 ### Creating a New Skill
 
 1. Create a directory under `instance/my-config/agent/skills/`:

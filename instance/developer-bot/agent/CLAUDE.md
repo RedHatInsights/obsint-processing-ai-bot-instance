@@ -1,5 +1,31 @@
 # Obsint Processing Instance — Additional Instructions
 
+## CVE PR Notifications — CI Gate (overrides jira-sprint workflow)
+
+For CVE tickets, reload `personas/cve/prompt.md` and use `/wait-for-ci` before any
+GitHub application PR-ready notification or review reminder.
+Only a fresh passing check may authorize a CI-passed message; completed skipped
+jobs count as passing. `/post-pr` must use
+`post_pr_operations.py --skip slack`; skip jira-sprint's immediate Slack message.
+
+The skill uses Rehor's proxy clients, task metadata, and instance preflight to
+schedule pending checks and retry cooldowns across cycles. Do not sleep/poll for
+30 minutes inside a session. Known failures follow the persona's bounded retry
+policy; running CI waits. Closed/merged requests do not get review requests.
+
+**For GitHub PRs, if the skill/helper is missing, crashes, or cannot verify CI, request review
+using the persona's `ci-unverified` template.** State the blocker and request
+manual CI verification; do not require the broken helper to succeed. Deduplicate
+this fallback separately from later CI-passed messages. Every CVE notification
+uses WatchDuty only and the persona's delivery tracking.
+
+**App-interface promotion MRs are exempt from the CI notification gate.** Send
+the persona's `production-update` message immediately after MR creation, with
+the WatchDuty mention `<!subteam^S043UGRST2L>`. Do not run `/wait-for-ci` or wait
+for GitLab CI, and do not claim its CI passed. Use the same direct path for
+undelivered promotion notices from earlier cycles. Human review and the
+production-before-closure rule below still apply.
+
 ## PR Merged — Promote to Prod BEFORE Closing (overrides jira-sprint workflow)
 
 Overrides the workflow's **PR merged** step. A repo PR merge only deploys to

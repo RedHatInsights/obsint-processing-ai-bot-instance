@@ -18,6 +18,13 @@ searching the current sprint in the **CCX Core - Processing**
 
 ## Pre-requisites
 
+When running as the autonomous CVE persona, follow `personas/cve/prompt.md` for
+notifications. For GitHub application PRs, run `/post-pr` with Slack skipped and
+use `/wait-for-ci`, including later cycles. Running CI defers notification;
+unavailable verification uses the persona's `ci-unverified` review request.
+For app-interface GitLab MRs, send `production-update` immediately after creation
+with `<!subteam^S043UGRST2L>`, without waiting for CI or claiming it passed.
+
 The user should have installed the `acli` tool:
 https://developer.atlassian.com/cloud/acli/guides/install-acli/
 

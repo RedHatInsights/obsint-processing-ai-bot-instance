@@ -253,8 +253,8 @@ When the verdict is **NOT AFFECTED** for the `:latest` image, check what image i
      - Upstream fix: {URL}
      ```
    - Transition ticket to "Code Review" (do NOT close — awaiting MR merge)
-   - Send the `production-update` WatchDuty notification defined in the Slack
-     Notifications section, linking the app-interface MR.
+   - Immediately send the `production-update` message from the Slack Notifications
+     section with `<!subteam^S043UGRST2L>`. Do not wait for this MR's GitLab CI.
 
 ### 5. Document assessment in Jira
 
@@ -615,6 +615,8 @@ After the PR is merged, the image needs time to build in Konflux and appear in Q
    - Add comment after creation: "Created by Řehoř - requires human approval before merge"
    - Link the MR in the Jira ticket comment
    - Transition ticket to "Code Review" (NOT Closed — awaiting MR merge)
+   - Immediately send `production-update` with `<!subteam^S043UGRST2L>` using the
+     Slack Notifications section. This promotion notice does not wait for GitLab CI.
 
 4. **Important**:
    - App-interface MRs ALWAYS require human review - never auto-merge
@@ -643,48 +645,31 @@ This ensures reviewers know the PR/MR was automated and requires human verificat
 
 ## CI Pipeline Verification
 
-After creating a PR, **wait for all CI checks to complete** before sending any
-PR-related WatchDuty notification. This overrides the jira-sprint workflow's
-generic immediate `pr_created` Slack step
-for CVE PRs. Do not send a passing-PR notification while CI is pending or
-failing; send a WatchDuty failure notification only after the retry or fix
-attempts below are exhausted.
+After creating a GitHub application PR, wait for CI before sending a CI-passed
+review notification. This overrides jira-sprint's
+generic immediate `pr_created` step. Running CI defers review notification;
+known failures follow the retry/fix policy below. If the checker cannot verify
+CI, send the explicitly labelled `ci-unverified` review request this cycle so
+review is not silently blocked. That fallback never claims checks passed.
 
-### 1. Monitor CI checks
+App-interface is the only configured GitLab repository. Its promotion MRs send
+the `production-update` notice immediately without this CI gate, as described
+below. Their human review and merge requirements remain in effect.
 
-Poll the PR status until all checks finish:
+### 1. Check CI and schedule follow-up
 
-```bash
-gh pr checks <PR_NUMBER> --watch --fail-fast 2>&1 || true
-```
+Use `/wait-for-ci` after creation, pushes/reruns, and before passing notifications
+or review reminders for GitHub application PRs. The skill owns expected-check
+arguments, task metadata, the guarded Slack command, and result handling. Use
+Rehor's next cycle for pending CI and retry cooldowns; do not poll for 30 minutes
+inside the agent session. Keep deferred tasks active and Jira in Code Review.
 
-If `--watch` is not available or times out, poll manually:
+### 2. Act on the result
 
-```bash
-# Check every 2 minutes, up to 30 minutes
-for i in $(seq 1 15); do
-  STATUS=$(gh pr checks <PR_NUMBER> 2>&1)
-  echo "$STATUS"
-  if echo "$STATUS" | grep -qE "pending|queued|in_progress"; then
-    sleep 120
-  else
-    break
-  fi
-done
-```
-
-### 2. Evaluate CI results
-
-After all checks complete, check for failures:
-
-```bash
-gh pr checks <PR_NUMBER> 2>&1
-```
-
-If **all checks pass** → send the passing-PR WatchDuty notification described
-below.
-
-If **any check fails** → proceed to investigation (step 3).
+Follow the skill's `review_action`. Investigate known failures using steps 3–4;
+never count pending CI as a failed attempt. If the skill/helper is unavailable,
+send the `ci-unverified` template below directly, once per resource, without
+claiming CI passed. Never request review for a known closed/merged request.
 
 ### 3. Investigate CI failures
 
@@ -692,9 +677,12 @@ For each failing check:
 
 1. **Get the failure logs**:
    ```bash
-   # For GitHub Actions
-   gh run view <RUN_ID> --log-failed 2>&1 | tail -100
+   # GitHub Actions jobs and log links via the allowed proxy API command
+   gh api "repos/<OWNER>/<REPO>/actions/runs/<RUN_ID>/jobs"
    ```
+
+   Use the returned job/check URLs or the existing Konflux log tools for details.
+   `gh run` is not allowed by the runner's executor policy; use `gh api`.
 
 2. **Identify the root cause** — common categories:
    - **Test failure**: a unit/integration test broke due to the dependency change
@@ -708,16 +696,28 @@ For each failing check:
 
 #### 4a. Flaky/infra failures (network timeouts, runner issues, unrelated to the change)
 
-Wait and retry — do NOT attempt code fixes for infra problems:
+Schedule a retry — do NOT attempt code fixes for infra problems:
 
-1. **Wait 30 minutes** before retrying
-2. **Re-trigger the failed check**:
+1. If a final failure alert is already pending delivery for this URL, retry that
+   send instead of submitting more CI retries. Otherwise track each request in
+   task metadata `ci_retry_counts` (`{ "<URL>": <count> }`).
+   If its count is already 3 and CI still fails, send the final failure alert.
+   On the first infra failure, add count 0, set `ci_review_pending[URL]` to now
+   + 1800 seconds, and continue other work/end this cycle. **Do not sleep.**
+2. For an existing retry plan, use the saved due time from before this cycle's
+   check. Earlier checks leave the cooldown unchanged. If CI passed, send the
+   guarded passing notification; if running, defer. Only re-trigger a still-failed
+   check when its cooldown has expired and fewer than 3 retries were used:
    ```bash
-   gh run rerun <RUN_ID> --failed 2>&1
+   gh api "repos/<OWNER>/<REPO>/actions/runs/<RUN_ID>/rerun-failed-jobs" --method POST
    ```
-3. **Wait for CI to complete again** (repeat from step 1)
-4. Track retry count. After **3 retries** (total ~90 minutes of waiting), stop
-   and send the WatchDuty `ci-infra-failure` notification with details.
+3. After a successful retry request, increment its count and set
+   `ci_review_pending[URL]` to now + 1800 seconds. If retry submission fails,
+   persist the blocker and pending final alert per URL in task metadata before
+   sending the failure alert. If delivery fails, resume that send next cycle.
+   Do not re-trigger CI while it is running.
+4. If CI still fails after **3 retries**, stop and send the WatchDuty
+   `ci-infra-failure` notification with details.
 
 #### 4b. Failures caused by the CVE fix (test/lint/build failures)
 
@@ -727,15 +727,19 @@ If the failure is caused by the dependency change:
 2. **Apply the fix** locally
 3. **Run local tests** to verify: `make test && make lint` (or equivalent for the repo type)
 4. **Push the fix** to the PR branch
-5. **Wait for CI again** (repeat from step 1)
+5. Check CI with `/wait-for-ci`; defer running checks to Rehor's next cycle.
 
 Track attempt count. After **3 failed fix attempts**, stop trying and send the
 WatchDuty `ci-change-failure` notification.
 
 ### 5. CI outcome determines Slack notification
 
-- **All CI checks pass** (including after retries or fix attempts) → send the
-  passing-PR WatchDuty notification
+- **All CI checks succeed or are skipped** (including after retries or fix
+  attempts) → send the passing-PR WatchDuty notification through `/wait-for-ci`'s
+  guarded command
+- **CI running or awaiting a stable snapshot** → defer and schedule rechecking
+- **CI cannot be verified / checker unavailable** → send `ci-unverified` review
+  request once per resource and continue work; do not claim CI passed
 - **CI fails due to the change and fix not possible** → send the WatchDuty
   `ci-change-failure` notification
 - **CI fails due to infra/flaky reasons after 3 retries** → send the WatchDuty
@@ -771,11 +775,11 @@ echo "${WATCHDUTY_RESULT}"
 
 Use a stable, outcome-specific external key so different CVE lifecycle alerts
 do not suppress one another. For `RESOURCE-ID`, use `<OWNER/REPO>#<PR-NUMBER>`
-for application PR events, `<GITLAB-PROJECT>!<MR-NUMBER>` for production MR
+for GitHub PR events, `<GITLAB-PROJECT>!<MR-NUMBER>` for GitLab MR
 events, and the exact affected package name for a blocker without a PR.
 For inherited events, use the event type as `OUTCOME` and the same resource ID.
-Use the semantic event type: `pr_created` for a passing application PR or a new
-production MR, `review_reminder` for an unreviewed PR,
+Use the semantic event type: `pr_created` for a passing application request,
+production MR, or explicitly CI-unverified review request; `review_reminder` for an unreviewed PR,
 `release_pending` for a completed post-merge production update,
 `needs_help` for a blocked/unfixable change, and `infra_error` for CI or image
 infrastructure failures.
@@ -808,8 +812,9 @@ do not use `SLACK_WEBHOOK_URL` as a fallback, and do not block the PR lifecycle.
 For helpers that send Slack as part of bookkeeping, use these CVE-specific
 invocations so all messages follow the route above:
 
-- For `/post-pr`, use its operations entry point with Slack skipped; send the
-  passing-PR notification separately once CI passes:
+- For `/post-pr`, use its operations entry point with Slack skipped. GitHub
+  application notifications follow `/wait-for-ci`; app-interface promotion
+  notices use the immediate `production-update` path below:
 
   ```bash
   python3 .claude/skills/post-pr/scripts/post_pr_operations.py \
@@ -829,19 +834,22 @@ invocations so all messages follow the route above:
 
 ### Passing application CVE PR
 
-Send this only after every required CI check passes. Do not send it for the
-later app-interface promotion MR, or while a check is pending, skipped
-unexpectedly, or failing. If CI completes on a later cycle, send it on the first
-cycle that confirms all checks passed.
+Send this only using `/wait-for-ci`'s guarded command after every reported and
+known expected CI check succeeds or is skipped for the current GitHub PR.
+An app-interface promotion MR uses the separate immediate `production-update`
+template. Pending, missing, neutral, unknown, or failing checks do not authorize
+this CI-passed message.
+Unavailable verification uses `ci-unverified` below. If CI completes later,
+send the passing message on the first cycle that confirms it.
 
-Keep external key `<JIRA-KEY>:watchduty:pr-ready:<OWNER/REPO>#<PR-NUMBER>`, event
+Keep external key `<JIRA-KEY>:watchduty:pr-ready:<RESOURCE-ID>`, event
 `pr_created`, and this format:
 
 ```text
 🔒 *CVE PR ready for review: <{PR_URL}|{REPO}#{PR_NUMBER}>*
 <!subteam^S043UGRST2L>
 
-✅ *{CVE-ID}:* all CI checks passed.
+✅ *{CVE-ID}:* CI passed.
 {UPDATE_LINES}
 📋 <{JIRA_URL}|Jira>
 ```
@@ -857,12 +865,39 @@ Build `UPDATE_LINES` from the actual PR and include every applicable line:
 - Any proactive update:
   `✨ *Proactive update included:* {package} {old_version} → {new_version}`
 
-After a successful send (`sent: true`), add the PR's `<OWNER/REPO>#<PR-NUMBER>`
+After a successful send (`sent: true`), add the request's resource ID
 to `watchduty_notified_prs` in task metadata. Skip only already-recorded PRs on
 later cycles; a different PR for the same ticket still needs its own alert.
 Treat a legacy `watchduty_notified: true` as covering only the task's originally
 recorded PR. A failed send must not mark the PR as notified, so a later cycle
 can retry.
+
+### Review requested — CI unverified
+
+Use when `/wait-for-ci` reports `review_unverified`, checks are still missing on
+a due recheck after the skill's grace period, or the skill/script cannot run.
+Do not wait for the broken checker to recover before requesting
+review. Do not use this fallback for confirmed running CI, known CI failures,
+or a known closed/merged request; use their branches above.
+
+Use key `<JIRA-KEY>:watchduty:ci-unverified:<RESOURCE-ID>` and event `pr_created`.
+Send via the usual WatchDuty wrapper **without** the CI guard:
+
+```text
+⚠️ *CVE review requested — CI unverified: <{REQUEST_URL}|{REQUEST_LABEL}>*
+<!subteam^S043UGRST2L>
+
+*{CVE-ID}:* {brief verification blocker}.
+Please review and check CI manually before merging.
+📋 <{JIRA_URL}|Jira>
+```
+
+This fallback applies to GitHub application PRs, not app-interface promotion MRs.
+Include proactive-update context when applicable. After `sent: true`, record the resource ID separately in
+`watchduty_ci_unverified_requests` and do not repeat that fallback each cycle.
+Do not mark CI passed or add it to `watchduty_notified_prs`: a later verified
+notification must remain eligible. Preserve pending verification metadata and
+continue other work. If Slack itself fails, record it and retry the send later.
 
 ### Other CVE outcomes
 
@@ -880,8 +915,26 @@ All of these messages use the same layout and WatchDuty-only route.
 Current version is not vulnerable; manual review is needed.
 ```
 
-**Production update MR ready** — event `pr_created`, outcome
+**Production promotion MR opened** — event `pr_created`, outcome
 `production-update`:
+
+Send immediately after creating the app-interface MR through the WatchDuty
+wrapper above, including `<!subteam^S043UGRST2L>`. Do not run `/wait-for-ci`,
+query GitLab CI, or substitute `ci-unverified` for this notice. It requests
+review of the production promotion and does not claim that the MR's CI passed.
+Human approval and merge are still required before completing the production gate.
+
+Use key `<JIRA-KEY>:watchduty:production-update:<GITLAB-PROJECT>!<MR-NUMBER>`.
+If that resource is already in `watchduty_notified_prs`, skip the duplicate.
+Otherwise register `ci_review_pending[MR_URL]` for a delivery retry in 30 minutes
+and attempt the first send now. This entry tracks notification delivery only.
+After `sent: true`, add its resource ID to `watchduty_notified_prs` and remove
+its pending entry. Failed sends remain scheduled and never count as delivered.
+
+On later cycles, send undelivered promotion notices through this same direct
+path, including MRs deferred by older CI-gate versions. Do not restart an MR CI
+wait. Clear pending entries for already-notified or known closed/merged MRs.
+Promotion review reminders also bypass the CI gate and keep the WatchDuty ping.
 
 ```text
 🔄 *CVE production update: <{MR_URL}|{Component} app-interface MR>*
@@ -921,7 +974,7 @@ Likely cause: Konflux pipeline may need attention.
 ⚠️ *CVE PR CI infrastructure failure: <{PR_URL}|{REPO}#{PR_NUMBER}>*
 <!subteam^S043UGRST2L>
 
-*{CVE-ID}:* CI is still blocked after 3 retries (~90 min).
+*{CVE-ID}:* CI is still blocked after {N} retries. {retry_or_submission_blocker}
 > {check_name}: {one-line error summary}
 📋 <{JIRA_URL}|Jira>
 ```
