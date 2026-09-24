@@ -734,7 +734,7 @@ WatchDuty `ci-change-failure` notification.
 
 ### 5. CI outcome determines Slack notification
 
-- **All CI checks succeed or are skipped** (including after retries or fix
+- **All CI checks succeed, are skipped, or are neutral** (including after retries or fix
   attempts) → send the passing-PR WatchDuty notification through `/wait-for-ci`'s
   guarded command
 - **CI running or awaiting a stable snapshot** → defer and schedule rechecking
@@ -835,9 +835,9 @@ invocations so all messages follow the route above:
 ### Passing application CVE PR
 
 Send this only using `/wait-for-ci`'s guarded command after every reported and
-known expected CI check succeeds or is skipped for the current GitHub PR.
+known expected CI check succeeds, is skipped, or is neutral for the current GitHub PR.
 An app-interface promotion MR uses the separate immediate `production-update`
-template. Pending, missing, neutral, unknown, or failing checks do not authorize
+template. Pending, missing, unknown, or failing checks do not authorize
 this CI-passed message.
 Unavailable verification uses `ci-unverified` below. If CI completes later,
 send the passing message on the first cycle that confirms it.

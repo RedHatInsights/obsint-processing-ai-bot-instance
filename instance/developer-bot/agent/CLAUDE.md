@@ -4,7 +4,7 @@
 
 For CVE tickets, reload `personas/cve/prompt.md` and use `/wait-for-ci` before any
 GitHub application PR-ready notification or review reminder.
-Only a fresh passing check may authorize a CI-passed message; completed skipped
+Only a fresh passing check may authorize a CI-passed message; completed skipped and neutral
 jobs count as passing. `/post-pr` must use
 `post_pr_operations.py --skip slack`; skip jira-sprint's immediate Slack message.
 
