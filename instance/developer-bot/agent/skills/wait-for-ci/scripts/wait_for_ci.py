@@ -103,7 +103,7 @@ def inspect_pr(pr: str, expected: Collection[str]) -> dict:
 def evaluate(
     pr: str, sha: str, is_open: bool, rows: list[dict], expected: Collection[str]
 ) -> dict:
-    """Classify a snapshot; completed skipped checks count as passing."""
+    """Classify a snapshot; completed skipped and neutral checks count as passing."""
     missing = sorted(set(expected) - {row["name"] for row in rows})
     waiting_on = None
 
@@ -123,12 +123,12 @@ def evaluate(
         status = "pending"
         reason = "Checks are missing"
         waiting_on = "missing"
-    elif any(row["state"] not in {"SUCCESS", "SKIPPED"} for row in rows):
+    elif any(row["state"] not in {"SUCCESS", "SKIPPED", "NEUTRAL"} for row in rows):
         status = "blocked"
-        reason = "Neutral or unknown results are not proof of passing CI"
+        reason = "Unknown results are not proof of passing CI"
     else:
         status = "passed"
-        reason = "All reported and explicitly expected checks succeeded or were skipped"
+        reason = "All reported and explicitly expected checks succeeded, were skipped, or were neutral"
 
     return {
         "status": status,

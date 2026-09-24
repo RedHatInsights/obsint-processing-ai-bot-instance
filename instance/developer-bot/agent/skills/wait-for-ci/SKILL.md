@@ -16,8 +16,8 @@ App-interface is the only configured GitLab repository: send its
 The helper uses Rehor's proxy-backed `gh` client; no tokens or login are needed.
 It checks the current commit and confirms success twice, 30 seconds apart. Pending CI
 returns immediately: Rehor schedules the next check, without a long-running poll.
-Completed `SKIPPED` checks count as passing, including known expected checks.
-Every reported and expected check must be present with `SUCCESS` or `SKIPPED`.
+Completed `SKIPPED` and `NEUTRAL` checks count as passing, including known expected checks.
+Every reported and expected check must be present with `SUCCESS`, `SKIPPED`, or `NEUTRAL`.
 
 ## Schedule with Rehor
 

@@ -103,7 +103,7 @@ instances:
 
 The developer-bot's local [`/wait-for-ci`](instance/developer-bot/agent/skills/wait-for-ci/SKILL.md)
 checks GitHub application PRs using the runner's existing proxy-backed `gh`
-client. It requires no credentials in the agent. Completed skipped jobs count as
+client. It requires no credentials in the agent. Completed skipped and neutral jobs count as
 passing; pending, missing, or failed checks still prevent a passing notification.
 Running CI defers review notifications; unavailable verification sends a distinct
 WatchDuty review request marked **CI unverified**. Passing messages require a
