@@ -1,0 +1,298 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: obsint-processing-ai-proxy
+parameters:
+- name: NAMESPACE
+  value: ${NAMESPACE}
+- name: PROXY_NAME
+  value: devbot-obsint-processing-proxy
+- name: PROXY_SECRET_NAME
+  description: Existing shared credentials; override only when migrating other identities
+  value: devbot-secrets
+- name: GLITCHTIP_SECRET_NAME
+  description: Team-owned Vault-backed Secret with glitchtip-url and glitchtip-token
+  value: obsint-processing-glitchtip
+- name: PROXY_IMAGE
+  value: quay.io/redhat-services-prod/hcc-platex-services/rehor-proxy
+- name: PROXY_IMAGE_TAG
+  description: Explicit released Rehor proxy image tag (independent of the runner image)
+  required: true
+- name: GCP_PROJECT_ID
+  required: true
+- name: GCP_REGION
+  required: true
+- name: VERTEX_ALLOWED_MODELS
+  required: true
+- name: OPENAI_ALLOWED_MODELS
+  value: ""
+- name: GIT_AUTH_ENABLED
+  value: "false"
+- name: GITLAB_TLS_SKIP_VERIFY
+  value: "false"
+objects:
+
+# Copied from OpenShift-Fleet/rehor deploy/template.yaml at
+# f74440548ff965a870dda2ade66fb90d6da047a3 (proxy objects only).
+# Deploy once per team, separately from the three bot template targets.
+# GlitchTip uses GLITCHTIP_SECRET_NAME; other credentials use PROXY_SECRET_NAME.
+# GLITCHTIP_SECRET_NAME must contain glitchtip-url and glitchtip-token.
+# Provision the Secret and verify the proxy before switching bot targets.
+
+# --- Proxy Deployment (Squid + Executor server — holds all CLI secrets) ---
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: ${PROXY_NAME}
+    labels:
+      app.kubernetes.io/name: ${PROXY_NAME}
+      app.kubernetes.io/part-of: obsint-processing-ai
+  spec:
+    replicas: 1
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0
+        maxSurge: 1
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: ${PROXY_NAME}
+    template:
+      metadata:
+        labels:
+          app.kubernetes.io/name: ${PROXY_NAME}
+          app.kubernetes.io/part-of: obsint-processing-ai
+      spec:
+        automountServiceAccountToken: false
+        containers:
+        - name: proxy
+          image: ${PROXY_IMAGE}:${PROXY_IMAGE_TAG}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop: ["ALL"]
+          ports:
+          - containerPort: 3128
+            name: squid
+            protocol: TCP
+          - containerPort: 9090
+            name: executor
+            protocol: TCP
+          - containerPort: 8443
+            name: vertex-auth
+            protocol: TCP
+          - containerPort: 8444
+            name: jira-mcp
+            protocol: TCP
+          - containerPort: 8446
+            name: screenshot
+            protocol: TCP
+          - containerPort: 8447
+            name: git-auth
+            protocol: TCP
+          - containerPort: 8448
+            name: glitchtip
+            protocol: TCP
+          - containerPort: 8450
+            name: openai-auth
+            protocol: TCP
+          - containerPort: 9091
+            name: metrics
+            protocol: TCP
+          env:
+          - name: EXECUTOR_LISTEN
+            value: ":9090"
+          - name: GH_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: ${PROXY_SECRET_NAME}
+                key: gh-bot-cli-token
+          - name: GH_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: ${PROXY_SECRET_NAME}
+                key: bot-gh-username
+          - name: GITLAB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: ${PROXY_SECRET_NAME}
+                key: gl-bot-cli-token
+          - name: GL_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: ${PROXY_SECRET_NAME}
+                key: bot-gl-name
+          - name: GPG_PRIVATE_KEY_B64
+            valueFrom:
+              secretKeyRef:
+                name: ${PROXY_SECRET_NAME}
+                key: gh-bot-gpg-private
+          - name: GOOGLE_SA_KEY_B64
+            valueFrom:
+              secretKeyRef:
+                name: ${PROXY_SECRET_NAME}
+                key: gcp-vertex-claude-sa
+          - name: GCP_PROJECT_ID
+            value: ${GCP_PROJECT_ID}
+          - name: GCP_REGION
+            value: ${GCP_REGION}
+          - name: VERTEX_ALLOWED_MODELS
+            value: ${VERTEX_ALLOWED_MODELS}
+          - name: OPENAI_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: ${PROXY_SECRET_NAME}
+                key: openai-api-key
+                optional: true
+          - name: OPENAI_ALLOWED_MODELS
+            value: ${OPENAI_ALLOWED_MODELS}
+          - name: JIRA_URL
+            value: https://redhat.atlassian.net
+          - name: JIRA_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: ${PROXY_SECRET_NAME}
+                key: jira-email
+          - name: JIRA_API_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: ${PROXY_SECRET_NAME}
+                key: jira-token
+          - name: GLITCHTIP_URL
+            valueFrom:
+              secretKeyRef:
+                name: ${GLITCHTIP_SECRET_NAME}
+                key: glitchtip-url
+          - name: GLITCHTIP_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: ${GLITCHTIP_SECRET_NAME}
+                key: glitchtip-token
+          - name: GIT_AUTH_ENABLED
+            value: ${GIT_AUTH_ENABLED}
+          - name: GITLAB_TLS_SKIP_VERIFY
+            value: ${GITLAB_TLS_SKIP_VERIFY}
+          - name: GITLAB_CA_CERT_B64
+            valueFrom:
+              secretKeyRef:
+                name: ${PROXY_SECRET_NAME}
+                key: gitlab-ca-cert-b64
+                optional: true
+          # HTTP /metrics avoids Squid logging TCP kubelet probes as
+          # DENIED error:transaction-end-before-headers (TCP:3128).
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 512Mi
+
+# --- Proxy Service ---
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: ${PROXY_NAME}
+    labels:
+      app.kubernetes.io/name: ${PROXY_NAME}
+      app.kubernetes.io/part-of: obsint-processing-ai
+  spec:
+    type: ClusterIP
+    selector:
+      app.kubernetes.io/name: ${PROXY_NAME}
+    ports:
+    - port: 3128
+      targetPort: squid
+      protocol: TCP
+      name: squid
+    - port: 9090
+      targetPort: executor
+      protocol: TCP
+      name: executor
+    - port: 8443
+      targetPort: vertex-auth
+      protocol: TCP
+      name: vertex-auth
+    - port: 8444
+      targetPort: jira-mcp
+      protocol: TCP
+      name: jira-mcp
+    - port: 8446
+      targetPort: screenshot
+      protocol: TCP
+      name: screenshot
+    - port: 8447
+      targetPort: git-auth
+      protocol: TCP
+      name: git-auth
+    - port: 8448
+      targetPort: glitchtip
+      protocol: TCP
+      name: glitchtip
+    - port: 8450
+      targetPort: openai-auth
+      protocol: TCP
+      name: openai-auth
+    - port: 9091
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+
+# --- NetworkPolicy: Proxy accepts ingress from bot pods ---
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: ${PROXY_NAME}-ingress
+    labels:
+      app.kubernetes.io/part-of: obsint-processing-ai
+  spec:
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: ${PROXY_NAME}
+    policyTypes:
+    - Ingress
+    ingress:
+    - from:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/component: bot
+            devbot-proxy-client: ${PROXY_NAME}
+      ports:
+      - port: 3128
+        protocol: TCP
+      - port: 9090
+        protocol: TCP
+      - port: 8443
+        protocol: TCP
+      - port: 8444
+        protocol: TCP
+      - port: 8446
+        protocol: TCP
+      - port: 8447
+        protocol: TCP
+      - port: 8448
+        protocol: TCP
+      - port: 8450
+        protocol: TCP
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: openshift-customer-monitoring
+      ports:
+      - port: 9091
+        protocol: TCP
