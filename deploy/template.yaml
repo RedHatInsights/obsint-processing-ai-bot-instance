@@ -25,6 +25,12 @@ parameters:
   value: ""
 - name: BOT_NAME
   value: devbot-obsint-processing
+- name: PROXY_NAME
+  description: Proxy Service and pod label in the same namespace
+  value: devbot-proxy
+- name: GIT_AUTH_PROXY_HOST
+  description: Set to PROXY_NAME only after enabling Git auth on that proxy
+  value: ""
 - name: BOT_CONFIG_PATH
   value: ""
 - name: GCP_PROJECT_ID
@@ -48,16 +54,10 @@ objects:
 # ============================================================================
 # Bot-only deployment for obsint-processing-ai-bot-instance runner instance.
 #
-# Shared infrastructure (proxy, memory-server, secrets) is deployed by
-# the platform-frontend-ai-dev template in the same namespace.
-# This template creates only:
-#   1. Bot Deployment (name controlled by BOT_NAME parameter)
-#   2. NetworkPolicy (egress restricted to proxy + memory-server + DNS)
-#
-# Prerequisites (deployed by platform-frontend-ai-dev):
-#   - devbot-proxy       (ports 3128, 9090, 8443, 8444, 8446, 8448)
-#   - devbot-memory-server (port 8080)
-#   - devbot-secrets     (Vault secret with git identity + credentials)
+# PROXY_NAME defaults to the existing shared proxy; bot secrets stay shared.
+# To use the team proxy, deploy proxy-template.yaml once, then update all bot
+# targets in app-interface after verifying the proxy is ready.
+# The devbot-memory-server Service remains shared in the same namespace.
 # ============================================================================
 
 # --- Bot Deployment ---
@@ -79,6 +79,7 @@ objects:
         labels:
           app.kubernetes.io/name: ${BOT_NAME}
           app.kubernetes.io/component: bot
+          devbot-proxy-client: ${PROXY_NAME}
           app.kubernetes.io/part-of: devbot
       spec:
         containers:
@@ -104,15 +105,18 @@ objects:
           - name: CLAUDE_CODE_SKIP_VERTEX_AUTH
             value: "true"
           - name: ANTHROPIC_VERTEX_BASE_URL
-            value: http://devbot-proxy:8443
+            value: http://${PROXY_NAME}:8443
           - name: ANTHROPIC_VERTEX_PROJECT_ID
             value: dummy-project
           - name: CLOUD_ML_REGION
             value: global
           # Executor — thin client connects to proxy over TCP
           - name: EXECUTOR_ADDR
-            value: devbot-proxy:9090
-          # Git identity — per-platform (from shared Vault secret)
+            value: ${PROXY_NAME}:9090
+          # Git auth reverse proxy is opt-in during migration.
+          - name: GIT_AUTH_PROXY_HOST
+            value: ${GIT_AUTH_PROXY_HOST}
+          # Git identity — per-platform (from the existing shared Vault Secret)
           - name: GH_USER_NAME
             valueFrom:
               secretKeyRef:
@@ -133,7 +137,7 @@ objects:
               secretKeyRef:
                 name: devbot-secrets
                 key: bot-gl-email
-          # Jira identity (from shared Vault secret)
+          # Jira identity (must match the selected proxy credentials)
           - name: BOT_JIRA_EMAIL
             valueFrom:
               secretKeyRef:
@@ -162,30 +166,30 @@ objects:
           # WatchDuty channel for all developer-bot CVE persona alerts
           - name: WATCHDUTY_SLACK_WEBHOOK_URL
             value: ${WATCHDUTY_SLACK_WEBHOOK_URL}
-          # Proxy — shared pod deployed by platform-frontend-ai-dev
+          # Proxy — Service selected by PROXY_NAME
           - name: PROXY_HOST
-            value: devbot-proxy
+            value: ${PROXY_NAME}
           - name: HTTP_PROXY
-            value: http://devbot-proxy:3128
+            value: http://${PROXY_NAME}:3128
           - name: HTTPS_PROXY
-            value: http://devbot-proxy:3128
+            value: http://${PROXY_NAME}:3128
           - name: http_proxy
-            value: http://devbot-proxy:3128
+            value: http://${PROXY_NAME}:3128
           - name: https_proxy
-            value: http://devbot-proxy:3128
+            value: http://${PROXY_NAME}:3128
           - name: NO_PROXY
-            value: devbot-memory-server,devbot-proxy,localhost,127.0.0.1
+            value: devbot-memory-server,${PROXY_NAME},localhost,127.0.0.1
           - name: no_proxy
-            value: devbot-memory-server,devbot-proxy,localhost,127.0.0.1
+            value: devbot-memory-server,${PROXY_NAME},localhost,127.0.0.1
           # Jira — proxied through proxy container (mcp-atlassian on port 8444)
           - name: JIRA_MCP_URL
-            value: http://devbot-proxy:8444/mcp
+            value: http://${PROXY_NAME}:8444/mcp
           # GH release upload — proxied through proxy container (port 8446)
           - name: GH_RELEASE_UPLOAD_URL
-            value: http://devbot-proxy:8446/upload
+            value: http://${PROXY_NAME}:8446/upload
           # GlitchTip — proxied through proxy container (port 8448)
           - name: GLITCHTIP_API_URL
-            value: http://devbot-proxy:8448
+            value: http://${PROXY_NAME}:8448
           # Secrets that stay in bot container (SSO for E2E)
           - name: SSO_USERNAME
             valueFrom:
@@ -224,7 +228,7 @@ objects:
     - to:
       - podSelector:
           matchLabels:
-            app.kubernetes.io/name: devbot-proxy
+            app.kubernetes.io/name: ${PROXY_NAME}
       ports:
       - port: 3128
         protocol: TCP
@@ -235,6 +239,8 @@ objects:
       - port: 8444
         protocol: TCP
       - port: 8446
+        protocol: TCP
+      - port: 8447
         protocol: TCP
       - port: 8448
         protocol: TCP

@@ -277,7 +277,15 @@ parameters:
 ### Shared Infrastructure
 
 Ctibor connects to shared infrastructure deployed by the primary
-platform-frontend-ai-dev instance.
+platform-frontend-ai-dev instance by default. A separate team proxy can be
+deployed once for all three bot instances using
+[`deploy/proxy-template.yaml`](deploy/proxy-template.yaml). It reuses Rehor's
+proxy image and existing credentials, with a separate team-owned GlitchTip
+Secret populated from Vault. The memory server remains shared.
+
+Provision the team Secret with `glitchtip-url` and `glitchtip-token`, then deploy
+and verify the proxy before setting `PROXY_NAME` on the bot targets in
+app-interface. The default remains the shared `devbot-proxy`.
 
 ### App-Interface Deploy File
 
