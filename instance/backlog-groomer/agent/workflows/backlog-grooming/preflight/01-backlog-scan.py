@@ -29,13 +29,14 @@ def _search_backlog():
     # Basic filters — more granular filtering will be added in CCXDEV-16532
     status_list = ", ".join(f'"{s}"' for s in NOT_STARTED_STATUSES)
     jql = (
-        f"labels = {BOT_LABEL} "
+        f"project = CCXDEV "
+        f"AND labels IN (CCX-PROCESSING, OBSINT-PROCESSING) "
         f"AND status IN ({status_list}) "
         f"AND labels != ai-groomed "
         f"AND assignee is EMPTY "
         f"AND sprint is EMPTY "
         f"AND type NOT IN (Epic) "
-        f"ORDER BY created ASC"
+        f"ORDER BY Rank ASC"
     )
 
     data = jira_call(
