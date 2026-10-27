@@ -1,5 +1,6 @@
 workflow: ./workflows/backlog-grooming
 source: scheduled
+runtime: opencode
+provider: rehor-openai
+model: gpt-6-luna
 envs: []
-claude_md:
-  strategy: append

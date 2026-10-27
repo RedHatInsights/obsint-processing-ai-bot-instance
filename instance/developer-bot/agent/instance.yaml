@@ -1,5 +1,8 @@
 workflow: jira-sprint
 source: jira
+runtime: opencode
+provider: vertex
+model: claude-opus-4-6
 envs:
   - node
   - go
@@ -7,5 +10,3 @@ envs:
   - slack
   - container-scan
   - browser
-claude_md:
-  strategy: append

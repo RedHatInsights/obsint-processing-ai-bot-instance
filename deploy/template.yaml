@@ -39,9 +39,11 @@ parameters:
   required: true
 - name: VERTEX_ALLOWED_MODELS
   required: true
+- name: BOT_EXECUTION_ENGINE
+  value: coordinator
+- name: REHOR_OPENCODE_MAX_TOOL_CALLS
+  value: "200"
 - name: SLACK_WEBHOOK_URL
-  value: ""
-- name: WATCHDUTY_SLACK_WEBHOOK_URL
   value: ""
 - name: KEDA_TIMEZONE
   value: "Europe/Prague"
@@ -101,16 +103,26 @@ objects:
             value: http://devbot-memory-server:8080/health
           - name: BOT_MEMORY_HEALTH_TIMEOUT
             value: "120"
-          # Vertex AI — auth proxied through proxy container
-          - name: CLAUDE_CODE_SKIP_VERTEX_AUTH
-            value: "true"
-          - name: ANTHROPIC_VERTEX_BASE_URL
+          # OpenCode V2 — each profile selects its provider and baked deployment config.
+          - name: BOT_EXECUTION_ENGINE
+            value: ${BOT_EXECUTION_ENGINE}
+          - name: REHOR_OPENCODE_DEPLOYMENT_CONFIG
+            value: /home/botuser/app/${BOT_CONFIG_PATH}/opencode-deployment.json
+          - name: REHOR_OPENCODE_MAX_TOOL_CALLS
+            value: ${REHOR_OPENCODE_MAX_TOOL_CALLS}
+          - name: REHOR_WORKSPACE_OWNER_UID
+            value: "1000"
+          - name: REHOR_VERTEX_PROXY_URL
             value: http://${PROXY_NAME}:8443
-          - name: ANTHROPIC_VERTEX_PROJECT_ID
-            value: dummy-project
-          - name: CLOUD_ML_REGION
-            value: global
+          - name: VERTEX_ALLOWED_MODELS
+            value: ${VERTEX_ALLOWED_MODELS}
+          - name: REHOR_MODEL_PROXY_URL
+            value: http://${PROXY_NAME}:8450/v1
+          # Non-secret client placeholder; upstream model credentials stay in the proxy.
+          - name: REHOR_MODEL_PROXY_TOKEN
+            value: rehor-runtime
           # Executor — thin client connects to proxy over TCP
+          # GlitchTip helpers also derive this host's port 8448 from EXECUTOR_ADDR.
           - name: EXECUTOR_ADDR
             value: ${PROXY_NAME}:9090
           # Git auth reverse proxy is opt-in during migration.
@@ -160,12 +172,9 @@ objects:
             value: http://devbot-memory-server:8080/api/bot-status
           - name: COSTS_API_URL
             value: http://devbot-memory-server:8080/api/costs
-          # Slack notifications
+          # One configured Slack destination per bot; developer-bot shares its app webhook.
           - name: SLACK_WEBHOOK_URL
             value: ${SLACK_WEBHOOK_URL}
-          # WatchDuty channel for all developer-bot CVE persona alerts
-          - name: WATCHDUTY_SLACK_WEBHOOK_URL
-            value: ${WATCHDUTY_SLACK_WEBHOOK_URL}
           # Proxy — Service selected by PROXY_NAME
           - name: PROXY_HOST
             value: ${PROXY_NAME}
@@ -187,9 +196,6 @@ objects:
           # GH release upload — proxied through proxy container (port 8446)
           - name: GH_RELEASE_UPLOAD_URL
             value: http://${PROXY_NAME}:8446/upload
-          # GlitchTip — proxied through proxy container (port 8448)
-          - name: GLITCHTIP_API_URL
-            value: http://${PROXY_NAME}:8448
           # Secrets that stay in bot container (SSO for E2E)
           - name: SSO_USERNAME
             valueFrom:
@@ -243,6 +249,8 @@ objects:
       - port: 8447
         protocol: TCP
       - port: 8448
+        protocol: TCP
+      - port: 8450
         protocol: TCP
     - to:
       - podSelector:

@@ -1,296 +1,184 @@
 # obsint-processing-ai-bot-instance
 
-This Rehor instance is an autonomous developer agent that does it all: grooms Jira tickets, picks up work using Jira tickets,
-implements code changes, opens PRs/MRs, and maintains them through the review
-process without human intervention. It can also function without Jira utilising scheduled runs which we use for example to help with watch duty activities such as triaging why tests are failing.
+Three [Řehoř](https://github.com/OpenShift-Fleet/rehor) bot profiles serve the CCX
+Processing team: developer-bot implements Jira work, WatchDuty monitors CI and
+MintMaker PRs, and backlog-groomer assesses Jira tickets and prepares CVE work.
 
-It is an instance of the [platform-frontend-ai-dev](https://github.com/RedHatInsights/platform-frontend-ai-dev)
-framework (codenamed **Rehor**), customized for the CCX Processing team.
+For ticket assignment and operating guidance, see [CCX Docs — agents](https://ccx.pages.redhat.com/ccx-docs/docs/processing/agents/).
+The shared [dashboard](https://devbot-memory-server-platform-frontend-ai-dev-stage.apps.rosa.hcmais01ue1.s9m2.p3.openshiftapps.com/#/instances)
+shows task progress and bot activity.
 
-For an overview of how Ctibor works (architecture, priority system) and how to
-assign tasks via Jira, see the
-[CCX Docs — agents section](https://ccx.pages.redhat.com/ccx-docs/docs/processing/agents/).
+## Runtime and model selection
 
-The dashboards are available [here](https://devbot-memory-server-platform-frontend-ai-dev-stage.apps.rosa.hcmais01ue1.s9m2.p3.openshiftapps.com/#/instances).
+All profiles use native OpenCode V2 through the coordinator execution engine.
+The `dev-bot` submodule pins the merged runtime at
+`e6b0fda738c71b8be694b8711cf32e53eee59c9b` (OpenCode CLI/client 2.1.2).
 
-## Table of Contents
+| Profile | Provider and model | Work |
+| --- | --- | --- |
+| `instance/developer-bot` | Vertex: Claude Opus 4.6; Sonnet 4.6 utility model | Jira implementation, public GitHub, private GitLab/app-interface, CVEs, GlitchTip |
+| `instance/watchduty` | OpenAI Responses: GPT-6 Luna, medium reasoning | Jenkins monitoring and public GitHub MintMaker maintenance |
+| `instance/backlog-groomer` | OpenAI Responses: GPT-6 Luna, medium reasoning | Scheduled Jira backlog assessment and CVE grooming |
 
-- [Personas](#personas)
-- [Skills](#skills)
-- [Persona vs Skill](#persona-vs-skill)
-- [Configuration](#configuration)
-- [Deployment](#deployment)
+Provider selection is per profile. Developer-bot stays on Vertex throughout a
+task, including production promotion; there is no cross-provider task handoff.
+The OpenAI profiles are scoped to Jira grooming, configured Jenkins monitoring,
+and public GitHub repositories. Other repository hosts and their content in
+shared checkouts are outside their scope. Backlog-groomer applies the fixed
+`repo:app-interface` Jira label for CVEs without a repository mapping or lookup.
 
-## Personas
+Native agent roles and delegation permissions do not create separate OS
+sandboxes. WatchDuty's primary agent owns task/memory updates, Slack reporting,
+and publication; its MintMaker worker returns scoped local work and evidence.
+Developer-bot's coordinator likewise owns lifecycle/publication and delegates
+technical work to its domain specialists. Workers cannot recursively delegate.
 
-Personas are domain-specific behavioral prompts that guide Ctibor's approach to
-different types of work. They provide coding standards, test commands,
-conventions, and workflows tailored to a specific technology or domain.
+## Configuration and native resources
 
-### How Personas Work
+Each profile has the following structure:
 
-Personas are stored as `prompt.md` files under
-[`instance/my-config/agent/personas/<name>/`](instance/my-config/agent/personas/).
+```text
+instance/<profile>/
+├── opencode-deployment.json       # Image-owned provider/models and directory grants
+└── agent/
+    ├── instance.yaml             # Workflow, runtime, provider, model, environments
+    ├── AGENTS.md                 # Instance instructions
+    ├── opencode.json             # Primary agent and native delegation settings
+    ├── project-repos.json        # Repository keys, upstream/fork URLs, host
+    ├── mcp.json                  # Optional instance MCP endpoints
+    ├── .opencode/
+    │   ├── agents/*.md           # Native primary/subagent definitions
+    │   ├── instructions/         # Optional coordinator lifecycle instructions
+    │   └── skills/<name>/        # SKILL.md, scripts, and reference data
+    ├── preflight/                # Optional deterministic instance preflights
+    └── workflows/<name>/         # Optional custom workflow AGENTS.md and preflights
+```
 
-Ctibor **dynamically selects** the appropriate persona based on the ticket
-description and the repository's tech stack. For example:
+Remote config sync refreshes the selected `agent/` profile each cycle. Native
+resources replace legacy persona prompt directories and Claude instruction
+assembly. Deterministic Python preflights still run before model sessions.
+Add native agents with V2 YAML frontmatter (`description`, `mode`, `model`, and
+ordered `permissions`); update delegation rules when adding a worker. Add local
+skills under `.opencode/skills/<name>/` with `name` and `description` frontmatter.
 
-- A repo with `package.json` triggers the frontend persona
-- A repo with `go.mod` triggers the `golang` backend persona
-- A Python backend repo with `pyproject.toml` or Python dependency metadata triggers the `python-backend` persona
-- A CVE ticket triggers the CVE persona
+Custom helper scripts run from the synced profile, for example:
 
-Personas are not hardcoded to specific repositories.
+```text
+/home/botuser/app/data/remote-config/${BOT_CONFIG_PATH}/agent/.opencode/skills/
+```
 
-### Creating a New Persona
+Shared/workflow/environment helpers are still installed by Řehoř under
+`.claude/skills/`. Commands such as
+`python3 .claude/skills/slack-notify/slack_notify.py ...` deliberately retain that
+path; it does not select the Claude runtime. The OpenCode shell restores normal
+XDG homes, so custom scripts must not assume the shell's XDG directory is the
+native resource staging directory.
 
-1. Create a directory under `instance/my-config/agent/personas/` with the
-   persona name:
-   ```
-   instance/my-config/agent/personas/my-new-persona/
-   ```
+Developer-bot's [/wait-for-ci](instance/developer-bot/agent/.opencode/skills/wait-for-ci/SKILL.md)
+retains the GitHub CI notification gate and deferred retry behavior. App-interface
+promotion MRs send the separate production-update review request immediately;
+human review/merge and production verification remain required before closure.
 
-2. Add a `prompt.md` file with the behavioral instructions. A good persona
-   should cover:
+## Image and deployment
 
-   - **Tech stack description** — languages, frameworks, key dependencies
-   - **Development commands** — how to build, lint, test, and verify
-   - **Coding conventions** — style, patterns, imports
-   - **Workflow steps** — how to approach common tasks (dependency updates,
-     bug fixes, etc.)
-   - **Jira integration** — comment templates for assessment and resolution
-   - **PR attribution** — the bot's identity line for PRs
-   - **Production image updates** — app-interface MR workflow if applicable
+Both Konflux pipelines in `.tekton/` build the unmodified upstream
+[Dockerfile.runner](dev-bot/Dockerfile.runner) from the repository root.
 
-3. Commit and push. Ctibor picks up the new persona on its next cycle.
+Developer-bot uses the supported `SLACK_WEBHOOK_URL` for both ordinary updates
+and CVE alerts. App-interface maps it to the existing
+`ctibor-cve-watchduty-slack-webhook` secret. The shared memory-server sends
+incoming app webhooks a `text` payload; developer-bot composes Slack mrkdwn
+titles, labelled links, summaries, and next actions directly. Ordinary updates
+have no mentions; CVE alerts retain the WatchDuty group mention and their CI
+and production gates. Shared helpers' automatic Slack messages are suppressed
+where a formatted lifecycle message is composed, avoiding duplicate sends.
+The scheduled WatchDuty profile retains its own existing webhook.
 
-## Skills
+Notifications use immediate mode. Daily digest scheduling is not enabled;
+the pinned memory-server's digest sender uses the workflow-specific `msg`
+payload and would need incoming-webhook support before enabling digests here.
 
-Skills are reusable, structured workflows that provide step-by-step procedures
-for specific tasks. They complement personas by adding concrete recipes on top
-of broad behavioral guidelines.
+GlitchTip's helper derives the selected proxy hostname from `EXECUTOR_ADDR`
+and connects to port 8448. Its organization defaults to `ccx`; the existing
+team proxy supplies the upstream URL and authentication token. This setup needs
+no runtime patch, private webhook file, or new Vault credentials.
 
-### How Skills Work
+The push pipeline publishes the instance image; PR images expire after five
+days. Production image/template references are managed by
+[app-interface's obsint-deploy.yaml](https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/data/services/insights/platform-frontend-ai-dev/obsint-deploy.yaml).
+Its existing bot targets supply `BOT_CONFIG_PATH` and the team `PROXY_NAME`.
 
-Skills are stored under [`instance/my-config/agent/skills/<name>/`](instance/my-config/agent/skills/)
-and contain:
+The [bot template](deploy/template.yaml) sets:
 
-- `SKILL.md` — a structured workflow document with frontmatter (name,
-  description, trigger conditions)
-- `reference/` — supporting data files used by the skill
+```text
+BOT_EXECUTION_ENGINE=coordinator
+REHOR_OPENCODE_DEPLOYMENT_CONFIG=/home/botuser/app/${BOT_CONFIG_PATH}/opencode-deployment.json
+REHOR_OPENCODE_MAX_TOOL_CALLS=200
+REHOR_WORKSPACE_OWNER_UID=1000
+REHOR_VERTEX_PROXY_URL=http://${PROXY_NAME}:8443
+REHOR_MODEL_PROXY_URL=http://${PROXY_NAME}:8450/v1
+REHOR_MODEL_PROXY_TOKEN=rehor-runtime
+```
 
-The bot invokes a skill when the ticket or context matches the trigger
-conditions defined in the skill's frontmatter.
+The last value is a non-secret client placeholder. Model-provider credentials
+remain in the proxy, sourced from Vault-backed Secrets. The
+[team proxy template](deploy/proxy-template.yaml) defaults `OPENAI_ALLOWED_MODELS`
+to `gpt-6-luna`; the existing proxy Secret must contain a usable OpenAI key.
+Vertex must allow both `claude-opus-4-6` and `claude-sonnet-4-6`. NetworkPolicy
+permits the corresponding proxy ports, 8443 and 8450. Memory remains shared;
+GlitchTip keeps its separate team Secret and proxy endpoint.
 
-### Upstream Skills
+The current GitOps proxy pin (`56fe0e6...`) predates OpenAI support. The companion
+app-interface MR upgrades it to the released proxy
+`e6b0fda738c71b8be694b8711cf32e53eee59c9b` and explicitly allows Luna, using the
+existing provider credentials. The registry manifest was verified as
+`sha256:cb95369189e9f373c33174799ce5ac64e3f14614bbdee9f4fc429c2385581005`.
 
-The [platform-frontend-ai-dev](https://github.com/RedHatInsights/platform-frontend-ai-dev)
-framework provides additional built-in skills that are available to all
-instances:
+## Paired rollout and rollback
 
-| Skill | Purpose |
-|-------|---------|
-| `/triage` | Pre-fetches all active tasks, PR/MR statuses, CI results, reviews, Jira comments |
-| `/new-work` | Fetches unassigned sprint candidates with full context |
-| `/claim-ticket` | Claims a Jira ticket (assign, transition, add to sprint) |
-| `/push-and-pr` | Pushes branch and creates PR/MR via API |
-| `/post-pr` | Post-PR actions (Jira transition, comments) |
-| `/wrap-up` | Post-merge cleanup (archival, Jira transition, Slack, branch deletion) |
-| `/slack-notify` | Posts notifications to Slack (48h cooldown per ticket) |
-| `/auto-fork` | Auto-forks repos under the bot account |
+Publishing profiles to the tracked config branch can affect an old runner on
+its next cycle. A profile update or restart cannot install OpenCode V2 or the
+baked provider configuration.
 
-### Local CI Gate Skill
+1. Pause all three bots, drain active cycles, and hold KEDA scheduling before
+   applying the companion app-interface update. It changes the developer-bot
+   webhook mapping as well as the proxy; old profiles still expect the separate
+   CVE variable. Record the prior immutable
+   image, template settings, compatible config revision, and runtime selection.
+2. Merge and deploy the companion app-interface proxy and webhook update first,
+   keeping the bots paused until the matching runner and profiles are deployed.
+3. Merge this migration and build a fresh image from the pinned submodule.
+   Reconcile the released image, template, and matching
+   profiles together. Use fresh runner filesystems to avoid stale merged config.
+4. Run a controlled staging `--once` cycle for each profile. Check the effective
+   provider/model, native primary/delegation, custom/shared helpers, MCP access,
+   notification routing, task state, transcript, usage, and child-process cleanup.
+   Confirm developer-bot's CI/promotion gates and scheduled dedup behavior.
+5. Resume scheduling only after those profile-specific gates pass.
 
-The developer-bot's local [`/wait-for-ci`](instance/developer-bot/agent/skills/wait-for-ci/SKILL.md)
-checks GitHub application PRs using the runner's existing proxy-backed `gh`
-client. It requires no credentials in the agent. Completed skipped and neutral jobs count as
-passing; pending, missing, or failed checks still prevent a passing notification.
-Running CI defers review notifications; unavailable verification sends a distinct
-WatchDuty review request marked **CI unverified**. Passing messages require a
-successful gate with two matching green observations, 30 seconds apart. Pending
-checks return immediately; Rehor's task metadata and instance preflight schedule
-the next check or retry cooldown, even when built-in triage skips clean requests.
-There is no long polling loop inside the agent's time-limited session. Missing
-checks get one scheduled grace period before an unverified review request.
+For rollback, pause/drain and hold scheduling again. Restore the previous
+Claude-compatible tracked config revision, immutable image, and template/engine
+settings together, then start fresh runners and verify them before resuming.
+An image-only rollback leaves incompatible remotely synced OpenCode profiles.
+Retain Vertex credentials and the previous image throughout the rollback window.
 
-App-interface is the only configured GitLab repository. Its production-promotion
-MR sends the `production-update` review request immediately after creation, with
-the WatchDuty mention, without waiting for GitLab CI. Human review and merge
-are still required before the production workflow can complete.
+## Local validation
 
-Run its offline regression tests with:
+Initialize the pinned submodule and use Node 22 or newer plus the upstream
+Python dependencies. Run these checks from the repository root:
 
 ```bash
-python3 -m unittest discover -s instance/developer-bot/agent/skills/wait-for-ci/tests -v
+git submodule update --init --recursive
+npm --prefix dev-bot/coordinator ci
+npm --prefix dev-bot/coordinator run build
+npm --prefix dev-bot/coordinator run typecheck
+npm --prefix dev-bot/coordinator test -- test/opencode-config.test.ts test/opencode-project-config.test.ts test/opencode-frontmatter.test.ts test/runner.test.ts test/deployment-config.test.ts
+python3 -m unittest discover -s instance/watchduty/agent/workflows/watchduty/tests -v
+git diff --check
 ```
 
-### Creating a New Skill
-
-1. Create a directory under `instance/my-config/agent/skills/`:
-   ```
-   instance/my-config/agent/skills/my-new-skill/
-   ```
-
-2. Add a `SKILL.md` file with frontmatter and workflow steps:
-   ```markdown
-   ---
-   name: my-new-skill
-   description: Short description of what this skill does
-   triggers:
-     - keyword1
-     - keyword2
-   ---
-
-   # My New Skill
-
-   ## Step 1: Gather Context
-   ...
-
-   ## Step 2: Perform Action
-   ...
-
-   ## Step 3: Report Results
-   ...
-   ```
-
-3. Optionally add a `reference/` directory with supporting data files (YAML,
-   JSON, etc.) that the skill's workflow references.
-
-4. Commit and push to the instance repository.
-
-## Persona vs Skill
-
-| Aspect | Persona | Skill |
-|--------|---------|-------|
-| **Purpose** | Broad behavioral guidelines for a type of work | Specific step-by-step procedure for a defined task |
-| **Scope** | Covers an entire domain (e.g., "frontend maintenance") | Covers a single operation (e.g., "resolve a CVE") |
-| **Selection** | Auto-selected based on repo tech stack and ticket | Invoked explicitly as a slash command or by matching trigger conditions |
-| **Format** | Free-form markdown prompt | Structured workflow with frontmatter (name, description, triggers) |
-| **Composition** | A persona can reference skills | A skill runs within the context of the active persona |
-
-In short: the persona sets the *mindset*, the skill provides the *recipe*.
-
-## Configuration
-
-Ctibor's configuration lives under the
-[`instance/my-config/agent/`](instance/my-config/agent/) directory.
-
-### Configuration Files
-
-| File | Purpose |
-|------|---------|
-| `project-repos.json` | Maps repository names to bot fork URLs and upstream URLs. Each `repo:<name>` Jira label must match a key in this file. |
-| `mcp.json` | Configures MCP (Model Context Protocol) servers. Currently only `mcp-atlassian` for Jira integration. |
-| `personas/<name>/prompt.md` | Domain-specific behavioral prompts. See [Personas](#personas). |
-| `skills/<name>/SKILL.md` | Structured workflows. See [Skills](#skills). |
-| `skills/<name>/reference/` | Supporting data files for skills. |
-
-### project-repos.json
-
-This file maps the `repo:<name>` Jira labels to repository URLs. Each entry
-includes the bot's fork and the upstream repository:
-
-```json
-{
-  "insights-results-aggregator": {
-    "fork": "https://github.com/platex-rehor-bot/insights-results-aggregator.git",
-    "upstream": "https://github.com/RedHatInsights/insights-results-aggregator.git",
-    "host": "github"
-  },
-  "app-interface": {
-    "fork": "https://gitlab.cee.redhat.com/platex-rehor-bot/app-interface.git",
-    "upstream": "https://gitlab.cee.redhat.com/service/app-interface.git",
-    "host": "gitlab"
-  }
-}
-```
-
-The `host` field distinguishes GitHub repos (`gh` CLI) from GitLab repos
-(`glab` CLI).
-
-### mcp.json
-
-Configures external tool servers the bot can interact with:
-
-```json
-{
-  "mcpServers": {
-    "mcp-atlassian": {
-      "url": "${JIRA_MCP_URL}"
-    }
-  }
-}
-```
-
-### Adding a New Repository
-
-1. Add an entry to `project-repos.json`:
-   ```json
-   {
-     "my-new-repo": {
-       "fork": "https://github.com/platex-rehor-bot/my-new-repo.git",
-       "upstream": "https://github.com/RedHatInsights/my-new-repo.git",
-       "host": "github"
-     }
-   }
-   ```
-
-2. Ensure a matching persona exists or that an existing persona covers the
-   repo's tech stack.
-
-3. Commit and push. The bot will recognize `repo:my-new-repo` labels on the
-   next cycle. Forks are created automatically by the bot when it starts
-   working on a ticket and no fork exists yet.
-
-## Deployment
-
-The agent is deployed on OpenShift via Konflux CI/CD pipelines, with production
-image references managed through app-interface.
-
-### Build Pipeline
-
-The build is defined in `.tekton/`:
-
-- **Push pipeline** — triggers on push to `master`. Builds a container image
-  from `dev-bot/Dockerfile.runner` and pushes to:
-  ```
-  quay.io/redhat-user-workloads/obsint-processing-tenant/obsint-processing-ai-bot-instance/obsint-processing-ai-bot-instance:<revision>
-  ```
-
-- **PR pipeline** — triggers on PRs to `master`. Same build process but images
-  expire after 5 days.
-
-### Deployment Template
-
-The OpenShift deployment template lives at `deploy/template.yaml`. Key
-parameters:
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `IMAGE` | Production container image | `quay.io/redhat-services-prod/obsint-processing-tenant/obsint-processing-ai-bot-instance` |
-| `BOT_LABEL` | Jira label the bot polls for | `obsint-processing-ai` |
-| `BOT_BOARD_NAME` | Jira board name | `CCX Core - Processing` |
-| `BOT_SPRINT_PREFIX` | Sprint naming prefix | `CCXDEV Sprint` |
-| `WATCHDUTY_SLACK_WEBHOOK_URL` | Only Slack endpoint used by developer-bot CVE persona alerts | empty |
-| `REPLICAS` | Number of bot replicas | `0` (must be scaled up explicitly) |
-
-### Shared Infrastructure
-
-Ctibor connects to shared infrastructure deployed by the primary
-platform-frontend-ai-dev instance by default. A separate team proxy can be
-deployed once for all three bot instances using
-[`deploy/proxy-template.yaml`](deploy/proxy-template.yaml). It reuses Rehor's
-proxy image and existing credentials, with a separate team-owned GlitchTip
-Secret populated from Vault. The memory server remains shared.
-
-Provision the team Secret with `glitchtip-url` and `glitchtip-token`, then deploy
-and verify the proxy before setting `PROXY_NAME` on the bot targets in
-app-interface. The default remains the shared `devbot-proxy`.
-
-### App-Interface Deploy File
-
-The app-interface SaaS deploy configuration for Ctibor lives at:
-
-[`data/services/insights/platform-frontend-ai-dev/obsint-deploy.yaml`](https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/data/services/insights/platform-frontend-ai-dev/obsint-deploy.yaml)
-
-New versions are deployed automatically, no need to promote the service in app-interface.
+Local validation covers coordinator configuration/rendering, native definitions,
+helper resolution, and environment compatibility. It does not establish a successful Linux
+image build, real provider access, MCP connectivity, or live deployment behavior.
+Use the staging gates above and the pinned [Řehoř migration guide](https://github.com/OpenShift-Fleet/rehor/blob/e6b0fda738c71b8be694b8711cf32e53eee59c9b/docs/migrations/opencode-migration.md)
+for those checks.

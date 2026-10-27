@@ -6,8 +6,7 @@ preflight:
   - 01-jenkins-status.py
   - 02-mintmaker-prs.py
 
-provides:
-  claude_md: CLAUDE.md
+# Native workflow instructions are loaded from AGENTS.md.
 
 requires:
   mcp_servers:

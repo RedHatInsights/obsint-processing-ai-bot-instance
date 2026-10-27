@@ -25,7 +25,8 @@ parameters:
 - name: VERTEX_ALLOWED_MODELS
   required: true
 - name: OPENAI_ALLOWED_MODELS
-  value: ""
+  description: OpenAI model IDs served to the scheduled OpenCode profiles
+  value: gpt-6-luna
 - name: GIT_AUTH_ENABLED
   value: "false"
 - name: GITLAB_TLS_SKIP_VERIFY

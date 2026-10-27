@@ -1,6 +1,7 @@
 workflow: ./workflows/watchduty
 source: scheduled
+runtime: opencode
+provider: rehor-openai
+model: gpt-6-luna
 envs:
   - slack
-claude_md:
-  strategy: append

@@ -29,14 +29,16 @@ _preflight_debug = []
 
 
 def _find_skill_script():
-    """Find triage_jenkins.py via PYTHONPATH (.claude/skills/) or relative path fallback."""
+    """Prefer the selected profile's native skill over stale installed copies."""
+    profile = Path(__file__).resolve().parents[3]
+    for relative in (".opencode/skills", "skills"):
+        candidate = profile / relative / "triage-jenkins" / "triage_jenkins.py"
+        if candidate.is_file():
+            return candidate
     for p in os.environ.get("PYTHONPATH", "").split(os.pathsep):
         candidate = Path(p) / "triage-jenkins" / "triage_jenkins.py"
         if candidate.is_file():
             return candidate
-    fallback = Path(__file__).resolve().parent.parent.parent.parent / "skills" / "triage-jenkins" / "triage_jenkins.py"
-    if fallback.is_file():
-        return fallback
     return None
 
 

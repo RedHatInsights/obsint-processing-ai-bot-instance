@@ -6,8 +6,7 @@ preflight:
   - 01-backlog-scan.py
   - 02-cve-scan.py
 
-provides:
-  claude_md: CLAUDE.md
+# Native workflow instructions are loaded from AGENTS.md.
 
 requires:
   mcp_servers:
