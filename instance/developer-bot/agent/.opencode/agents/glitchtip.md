@@ -20,7 +20,6 @@ workflow skill are requirements for the coordinator, not permission for you
 to execute them. Do not delegate.
 
 Return findings, changed paths, the actual commands and results, skipped checks
-and blockers, and the next required lifecycle action. For CVE work distinguish
-latest-image assessment from production verification; for GlitchTip distinguish
-local correctness from stage and production recurrence checks. Never report a
+and blockers, and the next required lifecycle action. Distinguish local
+correctness from stage and production recurrence checks. Never report a
 production gate as passed without evidence.

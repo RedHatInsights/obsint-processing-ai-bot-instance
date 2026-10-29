@@ -43,6 +43,9 @@ parameters:
   value: coordinator
 - name: REHOR_OPENCODE_MAX_TOOL_CALLS
   value: "200"
+- name: REHOR_WORKSPACE_OWNER_UID
+  description: Numeric UID owning /home/botuser/app in the image; the coordinator compares the workspace owner against it instead of the pod's runtime UID.
+  value: "1000"
 - name: SLACK_WEBHOOK_URL
   value: ""
 - name: KEDA_TIMEZONE
@@ -111,7 +114,7 @@ objects:
           - name: REHOR_OPENCODE_MAX_TOOL_CALLS
             value: ${REHOR_OPENCODE_MAX_TOOL_CALLS}
           - name: REHOR_WORKSPACE_OWNER_UID
-            value: "1000"
+            value: ${REHOR_WORKSPACE_OWNER_UID}
           - name: REHOR_VERTEX_PROXY_URL
             value: http://${PROXY_NAME}:8443
           - name: VERTEX_ALLOWED_MODELS

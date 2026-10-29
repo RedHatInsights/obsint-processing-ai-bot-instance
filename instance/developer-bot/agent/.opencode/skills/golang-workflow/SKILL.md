@@ -8,9 +8,9 @@ description: "Implements and tests scoped Go backend changes using repository co
 The primary `developer-coordinator` loads this skill for the complete task
 lifecycle. A delegated specialist applies only its explicitly assigned technical
 phase and returns evidence. Instructions below to claim tickets, update Jira or
-task state, commit, push, create or manage PRs/MRs, send Slack, promote images, or
-resolve GlitchTip issues are coordinator responsibilities; they do not authorize
-a specialist to perform those actions. The coordinator must inspect the result
+task state, commit, push, create or manage PRs/MRs, send Slack, or promote images
+are coordinator responsibilities; they do not authorize a specialist to perform
+those actions. The coordinator must inspect the result
 and perform each required lifecycle step itself. All human-review and production
 gates below remain mandatory.
 
