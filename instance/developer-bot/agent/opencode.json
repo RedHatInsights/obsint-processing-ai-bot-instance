@@ -1,0 +1,45 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "developer-coordinator",
+  "experimental": {
+    "subagent_depth": 1
+  },
+  "agents": {
+    "developer-coordinator": {
+      "description": "Owns developer-bot task lifecycle and delegates scoped technical work to domain specialists.",
+      "mode": "primary",
+      "permissions": [
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "subagent",
+          "resource": "cve",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "glitchtip",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "golang",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "python-backend",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "frontend-maintenance",
+          "effect": "allow"
+        }
+      ]
+    }
+  }
+}

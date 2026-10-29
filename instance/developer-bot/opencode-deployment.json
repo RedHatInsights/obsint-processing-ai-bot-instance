@@ -1,0 +1,34 @@
+{
+  "additionalDirectories": [
+    "/home/botuser/repos",
+    "/home/botuser/data",
+    "/tmp/opencode"
+  ],
+  "smallModel": "vertex/claude-sonnet-4-6",
+  "providers": [
+    {
+      "id": "vertex",
+      "name": "Claude on Vertex via Rehor proxy",
+      "settings": {
+        "baseURL": "{env:REHOR_VERTEX_PROXY_URL}"
+      },
+      "models": {
+        "claude-opus-4-6": {
+          "name": "Claude Opus 4.6",
+          "limit": {
+            "context": 200000,
+            "output": 32000
+          }
+        },
+        "claude-sonnet-4-6": {
+          "name": "Claude Sonnet 4.6",
+          "limit": {
+            "context": 200000,
+            "output": 32000
+          }
+        }
+      }
+    }
+  ],
+  "packages": []
+}

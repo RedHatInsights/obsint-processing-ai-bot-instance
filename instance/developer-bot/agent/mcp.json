@@ -2,6 +2,10 @@
   "mcpServers": {
     "mcp-atlassian": {
       "url": "${JIRA_MCP_URL}"
+    },
+    "hcc-patternfly-data-view": {
+      "type": "stdio",
+      "command": "hcc-pf-mcp"
     }
   }
 }
