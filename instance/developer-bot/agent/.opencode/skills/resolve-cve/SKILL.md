@@ -62,6 +62,10 @@ and parse the data from these fields:
 - **CVE ID** — embedded in the `summary` field, with this format
   `CVE-YYYY-NNNNN {Component}: {Package}: {Title} [services-ccx-default]` e.g.,
   `CVE-2026-32285 parquet-factory: github.com/buger/jsonparser: Denial of Service via malformed JSON input [services-ccx-default]`
+- **Component** — the first token after the CVE ID. It is usually a repo
+  name, but for image CVEs it can be a full image/product name such as
+  `lightspeed-services-ocp/ocp-rules-rhel9` (contains slashes — do not split
+  it on `/`).
 - **Affected package** — mentioned in the description's
   `Flaw:` section (the description starts with boilerplate
   "Security Tracking Issue", "Do not make this issue
@@ -92,6 +96,26 @@ If the issue is missing a CVE ID or the affected package
 is unclear from the flaw text, ask the user to clarify.
 
 ## Step 2: Assess Impact
+
+**Special case — productized rules images**: if the component in the CVE
+summary is `lightspeed-services-ocp/ocp-rules-rhel9` or
+`lightspeed-services-acm/ocp-rules-rhel9` (case-insensitive match on anything
+containing `lightspeed-services-ocp`, `lightspeed-services-acm`, or
+`ocp-rules-rhel9` — the `-acm` product matches first), follow the matching
+reference instead of the generic flow below:
+
+- `lightspeed-services-ocp/ocp-rules-rhel9` →
+  @reference/rules-containers-public.md (repo `ccx/rules-containers`, GitLab,
+  **`public` branch**; production = registry.redhat.io catalog publication)
+- `lightspeed-services-acm/ocp-rules-rhel9` →
+  @reference/insights-on-prem-acm.md (repo
+  `RedHatInsights/lightspeed-advisor-on-premise-ocp`, GitHub — PR against
+  `main`, no `public` branch in this repository; layered on the OCP image —
+  inherited packages are fixed in `rules-containers` first; released by
+  Konflux, published to registry.redhat.io)
+
+Both images have **no app-interface deployment** — the production gate is
+catalog publication, not an app-interface MR.
 
 Determine whether this project is affected:
 
@@ -301,6 +325,14 @@ Do NOT close the ticket yet — proceed to the production image update below.
 ### Paths B & C: Production Image Update (required before closing)
 
 After the repo PR is merged, the ticket is NOT done until production is also updated.
+
+**Exception — productized rules images** (`lightspeed-services-ocp/ocp-rules-rhel9`
+and `lightspeed-services-acm/ocp-rules-rhel9`): these images are not deployed
+via app-interface. Production means the fixed image is released and published
+to `registry.redhat.io` (see @reference/rules-containers-public.md and
+@reference/insights-on-prem-acm.md). Never create an app-interface MR for
+them.
+
 The image needs time to build in Konflux and appear in Quay.
 
 1. **Wait for image build**:

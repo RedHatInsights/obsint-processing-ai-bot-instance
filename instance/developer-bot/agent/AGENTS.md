@@ -148,6 +148,19 @@ including Priority 1.5. Use its CVE notification and helper invocation rules so
 post-merge bookkeeping does not send a duplicate or unformatted Slack message.
 
 - **CVE ticket OR `repo:app-interface` label present** → do NOT `/wrap-up` yet:
+  - **Exception — productized rules images** (`lightspeed-services-ocp/ocp-rules-rhel9`,
+    repo `rules-containers`, and `lightspeed-services-acm/ocp-rules-rhel9`,
+    repo `lightspeed-advisor-on-premise-ocp`): these images have no
+    app-interface deployment. Their production gate is the Konflux release
+    and publication of the fixed image to `registry.redhat.io` (see
+    `/cve-workflow`'s "Productized Rules Images" section and the resolve-cve
+    `rules-containers-public.md` / `insights-on-prem-acm.md` references).
+    Never create an app-interface MR for them; use the same
+    `[PROD-GATE:OPEN]`/`[PROD-GATE:CLEARED]` marker sequence, recording the
+    expected published tag (or "not released yet") in place of the MR URL, and
+    clear it only once the fixed tag is visible in the Red Hat container
+    catalog. For the ACM image, the gate also requires the fixed OCP base
+    image tag to be the one referenced by its `Dockerfile` `FROM`.
   - No app-interface MR yet → follow **Production Image Update (app-interface)**
     in `/cve-workflow` (wait for Konflux build → check app-interface
     deployment config → open MR with `glab mr create --repo <app-interface-path>

@@ -68,9 +68,28 @@ Extract the component (first token after the CVE ID) and look it up in the table
 | ccx-upgrades-data-eng | `repo:ccx-upgrades-data-eng` |
 | ccx-notification-service | `repo:ccx-notification-service` |
 | ccx-notification-writer | `repo:ccx-notification-writer` |
+| lightspeed-services-ocp/ocp-rules-rhel9 | `repo:rules-containers` (see note below) |
+| ocp-rules-rhel9 | `repo:rules-containers` (see note below) |
+| lightspeed-services-acm/ocp-rules-rhel9 | `repo:lightspeed-advisor-on-premise-ocp` (see note below) |
 
 Match is case-insensitive. If the component doesn't match any entry, flag as
 "unknown component — needs manual mapping" and skip labeling for that ticket.
+When several rows could match, prefer the most specific one:
+`lightspeed-services-acm/ocp-rules-rhel9` (ACM image) must be matched before
+the bare `ocp-rules-rhel9` row (OCP image).
+
+**Note — productized rules images**: `lightspeed-services-ocp/ocp-rules-rhel9`
+is the productized OCP rules image, managed in the private GitLab repository
+`gitlab.cee.redhat.com/ccx/rules-containers` (built from its `public`
+branch). `lightspeed-services-acm/ocp-rules-rhel9` is the ACM recommendations
+image, managed in the public GitHub repository
+`RedHatInsights/lightspeed-advisor-on-premise-ocp` (built on top of the OCP
+rules image). Like `app-interface` and `rules-containers`, the ACM repo is a
+known fixed mapping that does not require a repository lookup in this
+profile — apply the label directly. Unlike every other CVE component, the
+production update for these images is **not** an app-interface MR (they are
+released by Konflux and published to registry.redhat.io), so the
+`repo:app-interface` label must NOT be added to their tickets.
 
 ### Common issues to flag
 
