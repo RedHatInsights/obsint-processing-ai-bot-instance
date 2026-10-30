@@ -65,16 +65,33 @@ For each CVE ticket in the section:
    pattern `CVE-YYYY-NNNNN {Component}: {Package}: {Title}`. The component
    is the first token after the CVE ID (e.g., in
    `CVE-2026-13676 aggregator: golang: ...`, the component is `aggregator`).
+   The component can be a full image name containing slashes (e.g.
+   `CVE-2026-96636 lightspeed-services-ocp/ocp-rules-rhel9: pillow: ...` —
+   the component is `lightspeed-services-ocp/ocp-rules-rhel9`; do not split
+   it on `/`).
 
 2. **Map component to repo** using the mapping table in your native
    `backlog-grooming` agent instructions (section "CVE Component
    to Repo Mapping"). Cross-reference against `project-repos.json` to
-   confirm the repo key is valid. If no match, mark as "unknown component".
+   confirm the repo key is valid. `app-interface` and `rules-containers` are
+   known exceptions — they are valid fixed mappings (private GitLab repos)
+   that are intentionally absent from this profile's `project-repos.json`;
+   do not flag them as unknown. If no match, mark as "unknown component".
 
 3. **Determine labels to assign**:
    - `obsint-processing-ai` (bot pickup label)
    - `repo:<matched-repo-name>` (component repo)
    - `repo:app-interface` (always — every CVE needs a prod image update)
+
+   **Exception — productized rules images** (component matching
+   `lightspeed-services-acm/ocp-rules-rhel9` first, then `ocp-rules-rhel9` /
+   `lightspeed-services-ocp`): assign only `obsint-processing-ai` and the
+   component's repo label (`repo:lightspeed-advisor-on-premise-ocp` for the
+   ACM image, `repo:rules-containers` for the OCP image). Do NOT add
+   `repo:app-interface` — these images are not deployed via app-interface;
+   their production update is the registry.redhat.io catalog publication via
+   the Konflux release flow, so the app-interface label and promotion path do
+   not apply.
 
 4. For each ticket, call `jira_update_issue` to ADD labels:
    - `obsint-processing-ai`
