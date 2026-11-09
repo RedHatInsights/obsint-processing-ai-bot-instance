@@ -220,7 +220,7 @@ objects:
             limits:
               cpu: "4"
               memory: 4Gi
-              ephemeral-storage: 8Gi
+              ephemeral-storage: 16Gi
 
 # --- NetworkPolicy: Bot can only reach proxy + memory-server ---
 - apiVersion: networking.k8s.io/v1
