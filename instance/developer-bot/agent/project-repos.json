@@ -1,6 +1,6 @@
 {
   "app-interface": {
-    "url": "https://gitlab.cee.redhat.com/platex-rehor-bot/app-interface.git",
+    "url": "https://gitlab.cee.redhat.com/platform-experience-services-bot/app-interface.git",
     "upstream": "https://gitlab.cee.redhat.com/service/app-interface.git",
     "host": "gitlab"
   },
