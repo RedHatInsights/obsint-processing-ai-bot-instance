@@ -41,7 +41,10 @@ the item recovers.
 
 ## OpenCode Runtime
 
-This profile uses OpenCode with the `rehor-openai` provider and GPT-6 Luna.
+This profile uses OpenCode with the `rehor-openai` provider and GPT-6 Luna
+for all agents. The `message-composer` subagent is split out so message
+formatting and sending are isolated from classification; its definition
+enforces real-newline quoting so reports render correctly in Slack.
 Follow the native workflow AGENTS.md and the selected native primary agent.
 Shared/environment helper scripts remain installed under `.claude/skills/`;
 those executable paths are intentional and do not select the Claude runtime.
@@ -49,8 +52,12 @@ Use `/home/botuser/data` for persistent task data and `/tmp/opencode` for
 temporary files.
 
 The `watchduty` primary agent owns the scheduled cycle, task/memory updates,
-Slack notifications, deduplication, and sleep signal. Invoke the native
+Slack reporting decisions, deduplication, and sleep signal. Invoke the native
 `mintmaker-triage` subagent only for scoped public GitHub maintenance; inspect
-its result before publishing changes or sending notifications. Use
-`/home/botuser/repos` for public project checkouts. Workers share the runner
-filesystem, so delegate sequentially when they use the same checkout.
+its result before publishing changes or sending notifications. Delegate all
+Slack message composition and sending to the native `message-composer`
+subagent; hand it the classification results and job
+metadata, and it formats and sends the messages via the `/slack-notify`
+skill using real-newline quoting. Use `/home/botuser/repos` for public project checkouts. Workers share
+the runner filesystem, so delegate sequentially when they use the same
+checkout.

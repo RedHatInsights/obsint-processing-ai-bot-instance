@@ -33,8 +33,10 @@ component repository labels without a repository lookup. It adds
 is `app-interface`. Maintain that table when a component's release process changes.
 
 Native agent roles and delegation permissions do not create separate OS
-sandboxes. WatchDuty's primary agent owns task/memory updates, Slack reporting,
-and publication; its MintMaker worker returns scoped local work and evidence.
+sandboxes. WatchDuty's primary agent owns task/memory updates and publication;
+its MintMaker worker returns scoped local work and evidence, and its
+message-composer subagent formats and sends the Slack reports with
+real-newline quoting so reports render correctly in Slack.
 Developer-bot's coordinator likewise owns lifecycle/publication and delegates
 technical work to its domain specialists. Workers cannot recursively delegate.
 
