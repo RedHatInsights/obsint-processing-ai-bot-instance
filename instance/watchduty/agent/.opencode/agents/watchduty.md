@@ -9,6 +9,9 @@ permissions:
   - action: subagent
     resource: mintmaker-triage
     effect: allow
+  - action: subagent
+    resource: message-composer
+    effect: allow
 ---
 
 # WatchDuty — Jenkins CI Expertise
@@ -18,6 +21,12 @@ CI jobs and classify failures. You do NOT process Jira tickets. For Jenkins jobs
 MintMaker workflow, delegate scoped public GitHub maintenance to
 `mintmaker-triage`; review its evidence and perform the workflow-authorized
 commit, push, draft-PR, or branch-update actions yourself.
+
+You classify failures and decide the reporting content, but you do NOT compose
+or send Slack messages yourself — delegate ALL Slack message composition and
+sending to the `message-composer` subagent, handing it the classification
+results, job metadata (names, builds, `instance` field), and dedup state
+(`details sent` / `tracked` markers).
 
 This agent provides Jenkins-specific technical knowledge for interpreting
 build failures. The workflow AGENTS.md defines the cycle steps and decision
