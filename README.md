@@ -19,7 +19,7 @@ This runtime uses a per-cycle USD cost budget (`claude.budgetUsd` in its
 | Profile | Provider and model | Work |
 | --- | --- | --- |
 | `instance/developer-bot` | OpenAI Responses: GPT-6.1 Sol, medium reasoning; GPT-6 Luna utility model | Jira implementation, public GitHub, private GitLab/app-interface, CVEs, GlitchTip |
-| `instance/watchduty` | OpenAI Responses: GPT-6 Luna, medium reasoning | Jenkins monitoring and public GitHub MintMaker maintenance |
+| `instance/watchduty` | OpenAI Responses: GPT-6 Luna, medium reasoning; GPT-6.1 Terra message-composer subagent | Jenkins monitoring and public GitHub MintMaker maintenance |
 | `instance/backlog-groomer` | OpenAI Responses: GPT-6 Luna, medium reasoning | Scheduled Jira backlog assessment and CVE grooming |
 
 Provider selection is per profile. Developer-bot uses OpenAI Responses throughout
@@ -33,8 +33,10 @@ component repository labels without a repository lookup. It adds
 is `app-interface`. Maintain that table when a component's release process changes.
 
 Native agent roles and delegation permissions do not create separate OS
-sandboxes. WatchDuty's primary agent owns task/memory updates, Slack reporting,
-and publication; its MintMaker worker returns scoped local work and evidence.
+sandboxes. WatchDuty's primary agent owns task/memory updates and publication;
+its MintMaker worker returns scoped local work and evidence, and its
+message-composer subagent formats and sends the Slack reports on GPT-6.1
+Terra while the rest of the profile stays on GPT-6 Luna.
 Developer-bot's coordinator likewise owns lifecycle/publication and delegates
 technical work to its domain specialists. Workers cannot recursively delegate.
 
