@@ -86,6 +86,11 @@ retains the GitHub CI notification gate and deferred retry behavior. App-interfa
 promotion MRs send the separate production-update review request immediately;
 human review/merge and production verification remain required before closure.
 
+For CVEs that require no remediation, developer-bot records the scan evidence
+from the deployed or published image in Jira, sets **Story Points** to **1**,
+and moves the issue to **Done** (or the equivalent **Closed** status) without
+waiting for confirmation. A clean `:latest` alone does not qualify.
+
 ## Image and deployment
 
 Both Konflux pipelines in `.tekton/` build the unmodified upstream
@@ -217,6 +222,12 @@ baked provider configuration.
    provider/model, native primary/delegation, custom/shared helpers, MCP access,
    notification routing, task state, transcript, usage, and child-process cleanup.
    Confirm developer-bot's CI/promotion gates and scheduled dedup behavior.
+   For CVE triage, verify that a clean deployed/published image closes a staging
+   ticket with scan evidence and updates an existing estimate of 3 to 1. Include
+   a production-scoped ticket where the deployed digest is clean and a different
+   `:latest` digest is vulnerable. Verify
+   that an affected or unverified deployed image does not auto-close the ticket
+   or change its estimate, even when `:latest` is clean.
 5. Resume scheduling only after those profile-specific gates pass.
 
 For rollback, pause/drain and hold scheduling again. Restore the previous

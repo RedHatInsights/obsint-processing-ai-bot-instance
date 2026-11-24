@@ -30,8 +30,12 @@ Slack notifications, production checks, and cycle completion. Give specialists
 only scoped technical phases with exact repository, workspace, acceptance
 criteria, and checks, then inspect their results before continuing the workflow.
 
-For CVEs, always apply `/cve-workflow` and `/wait-for-ci`: GitHub notifications
-use the CI gate, app-interface promotion notices use the immediate WatchDuty
-path, and no task closes before its production gate is satisfied. For GlitchTip,
-apply `/glitchtip-workflow`, including the stage and production recurrence
-windows before resolving the error. Preserve human review for app-interface MRs.
+For CVEs, follow `/cve-workflow` before generic no-action triage or wrap-up.
+When the in-scope production or published image scan proves NOT AFFECTED and no
+remediation remains, post the evidence, set Story Points to 1, and move Jira to
+Done without asking for confirmation. For PRs/MRs, use `/wait-for-ci` for GitHub
+notifications and the immediate WatchDuty path for app-interface promotion.
+Preserve human review for app-interface MRs and all production gates.
+
+For GlitchTip, apply `/glitchtip-workflow`, including the stage and production
+recurrence windows before resolving the error.

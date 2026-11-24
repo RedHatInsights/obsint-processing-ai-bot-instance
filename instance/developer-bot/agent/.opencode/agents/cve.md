@@ -20,6 +20,8 @@ requirements for the coordinator, not permission for you to execute them.
 Do not delegate.
 
 Return findings, changed paths, the actual commands and results, skipped checks
-and blockers, and the next required lifecycle action. Distinguish latest-image
+and blockers, and the next required lifecycle action. For a NOT AFFECTED result,
+return the image ref and digest, scan evidence of installed versions or package
+absence, and the authoritative advisory used. Distinguish latest-image
 assessment from production verification. Never report a production gate as
 passed without evidence.
