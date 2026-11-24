@@ -124,13 +124,12 @@ catalog publication, not an app-interface MR.
 
 Determine whether this project is affected:
 
-1. **Check if the package is a dependency** — Use @reference/repos.yaml
-   to find the repository for this component. If the component name is not
-   among the repositories, ask the user to clarify.
-   Match case-insensitively (Jira may say `NLTK`, lock
-   file has `nltk`). If not present at all, the project
-   may not be affected. However, it can be installed at build time, so please
-   check also in @reference/images.yaml.
+1. **Check if the package is a dependency** — Identify the source repository
+   from the ticket's component or application `repo:` label using the active
+   profile's `project-repos.json`. The `repo:app-interface` label identifies
+   the deployment configuration. Check the source dependencies for the package
+   (e.g. Jira's `NLTK` may appear as `nltk`). Packages can also be installed
+   at build time, so verify the runtime image in step 5.
 2. **Check the installed version** — if found, compare the installed version
    with the vulnerable version range.
 3. **Check if the vulnerable code path is reachable** — if
@@ -276,10 +275,8 @@ The image needs time to build in Konflux and appear in Quay.
 1. **Wait for image build**:
    - After the PR is merged, wait **20 minutes** for the
      Konflux pipeline to build and push the new image to Quay
-   - Then verify the image is available:
-     ```
-     skopeo inspect docker://quay.io/redhat-services-prod/obsint-processing-tenant/<component>/<component>:latest
-     ```
+   - Follow “Wait for image build” in `/cve-workflow` to verify the full
+     output image reference for the merged revision in Quay.
    - If the image is not available after 20 minutes, wait
      another **20 minutes** and check again
    - If still not available after the second wait (40 minutes total), send the
