@@ -124,13 +124,12 @@ catalog publication, not an app-interface MR.
 
 Determine whether this project is affected:
 
-1. **Check if the package is a dependency** — Use @reference/repos.yaml
-   to find the repository for this component. If the component name is not
-   among the repositories, ask the user to clarify.
-   Match case-insensitively (Jira may say `NLTK`, lock
-   file has `nltk`). If not present at all, the project
-   may not be affected. However, it can be installed at build time, so please
-   check also in @reference/images.yaml.
+1. **Check if the package is a dependency** — Identify the source repository
+   from the ticket's component or application `repo:` label using the active
+   profile's `project-repos.json`. The `repo:app-interface` label identifies
+   the deployment configuration. Check the source dependencies for the package
+   (e.g. Jira's `NLTK` may appear as `nltk`). Packages can also be installed
+   at build time, so verify the runtime image in step 5.
 2. **Check the installed version** — if found, compare the installed version
    with the vulnerable version range.
 3. **Check if the vulnerable code path is reachable** — if
@@ -142,17 +141,13 @@ Determine whether this project is affected:
    a direct dependency, check whether it appears as a
    transitive dependency in the dependency tree. Trace which direct
    dependency pulls it in. Check things like `uv.lock` or `go.sum`.
-5. **Check if the vulnerability is introduced at build time** — find the
-   exact version using `syft`. For example:
-   ```
-   syft quay.io/redhat-services-prod/obsint-processing-tenant/parquet-factory/parquet-factory:latest
-   ```
-   or appending `-o json` if that makes it easier to parse.
-   Please make sure to use `--from registry`, otherwise it won't pull the latest
-   version.
-   If the package is there, it means it is installed at build time and may need
-   to be fixed by a rebuilt or enforcing a newer version in the Dockerfile.
-   Otherwise, the component is not affected.
+5. **Verify the runtime image** — follow section 4b of `/cve-workflow` to
+   identify and scan the deployed or customer-published digest before choosing
+   a resolution path. For a production-scoped ticket, use the deployed scan
+   even if a different `:latest` digest is vulnerable. A missing match only
+   proves absence if the scan succeeded and covered the affected ecosystem.
+   If verification is inconclusive, report the blocker and leave the ticket
+   open with its existing estimate.
 
 For `registry.redhat.io` images, load @reference/redhat-registry-proxy.md and
 use its Skopeo-to-OCI workflow before scanning with Syft. Direct Syft registry
@@ -179,114 +174,28 @@ Reasoning:
   "project uses the affected code path in module X"}
 ```
 
-**GATE — do not proceed without user acknowledgment.**
-The user may have context that changes the verdict
-(e.g., the package is used indirectly, or the feature
-is enabled in production but not in tests). Present the
-assessment and stop. Only continue after explicit "go".
+**GATE — do not start remediation without user acknowledgment in this
+interactive skill.** For a potential NOT AFFECTED verdict, proceed directly to
+Path A's production/published-image scan. No acknowledgment is required for
+the coordinator to close a verified NOT AFFECTED ticket.
 
 ## Step 4: Resolve
 
-Based on the verdict and user acknowledgment:
+Based on the verified verdict:
 
 ### Path A: Not Affected
 
-For productized rules image CVEs, use the matching reference to verify the
-published registry.redhat.io image; these images have no app-interface
-deployment. Do not use the app-interface-specific checks or actions below for
-those tickets. The generic app-interface steps in this path apply to other
-components only.
+Follow sections 4b and 5 of `/cve-workflow`. Verify the actual deployed image
+for standard components or the relevant published `registry.redhat.io` image
+for productized rules CVEs. If the scan proves NOT AFFECTED and no remediation
+is pending, the coordinator posts the evidence in Jira, sets Story Points to 1,
+and transitions to Done (or the equivalent Closed status) without asking for
+confirmation. Specialists only return scan evidence.
 
-Before closing, check what image is running in production:
-
-1. **Check production image in app-interface**:
-   - Open the `app-interface` repository
-   - Find the component's saas file or deployment config:
-     ```
-     find data/services/ -name "*.yml" -o -name "*.yaml" | xargs grep -l "<component>"
-     ```
-   - Extract the `ref:` or image tag currently deployed
-
-2. **If production image matches `:latest` or is also not affected**:
-
-   Add a comment to the Jira issue via `acli`:
-
-   ```
-   acli jira workitem comment create --key {Jira Key} --body '{comment text}'
-   ```
-
-   Comment text:
-
-   ```
-   **Assessment: Not Affected**
-
-   {CVE-ID} targets {package} versions {range}.
-
-   {Reason — one of:}
-   - Package is not in the dependency tree.
-   - Installed version ({version}) is outside the
-     vulnerable range.
-   - The vulnerable code path ({specific API/module}) is
-     not used by this project.
-
-   Production image verified: up to date.
-
-   References:
-   - {NVD URL}
-   - {Language advisory URL}
-   - {Upstream fix PR/commit URL}
-
-   No action required.
-   ```
-
-   Transition the issue to **Closed**:
-
-   ```
-   acli jira workitem transition --key {Jira Key} --status "Closed" --yes
-   ```
-
-   If "Closed" fails, try "Done" or "Won't Do" as the
-   status value. Use `--yes` to skip the confirmation prompt.
-
-3. **If production image is outdated (older ref, may be affected)**:
-
-   Scan the production image to confirm:
-   ```
-   syft quay.io/redhat-services-prod/obsint-processing-tenant/<component>/<component>:<production-ref> --from registry -o json
-   ```
-
-   If the vulnerable package exists at a vulnerable version in the production image:
-
-   a. Create an MR in app-interface to update the image reference to the latest tag:
-      - Push to the app-interface fork (from `project-repos.json`)
-      - Use the shared `/push-and-pr` helper from the app-interface checkout (GitLab API with the configured fork and upstream)
-      - Title: `Update <component> image to resolve <CVE-ID>`
-      - Description: Include CVE details, production vs latest scan comparison
-
-   b. Add Jira comment:
-      ```
-      **Assessment: Not Affected (latest image)**
-      **Production Image: Outdated — Update Required**
-
-      {CVE-ID} targets {package} versions {range}.
-
-      Latest image: {version or "not present"} — NOT AFFECTED
-      Production image ({production-ref}): {version} — AFFECTED
-
-      The latest built image is clean, but production runs an older
-      image that is still affected.
-
-      Action: Created app-interface MR to update production image.
-      MR: {MR_URL}
-
-      References:
-      - {NVD URL}
-      - {Language advisory URL}
-      - {Upstream fix PR/commit URL}
-      ```
-
-   c. Do NOT close the ticket — transition to "Code Review" instead.
-      The ticket stays open until the production image is updated.
+If production is affected or verification is inconclusive, do not close or
+change Story Points. Use the applicable promotion/release or blocker path in
+`/cve-workflow`. When running interactively, obtain user acknowledgment before
+starting any remediation.
 
 ### Path B: Dependency Bump
 
@@ -366,10 +275,8 @@ The image needs time to build in Konflux and appear in Quay.
 1. **Wait for image build**:
    - After the PR is merged, wait **20 minutes** for the
      Konflux pipeline to build and push the new image to Quay
-   - Then verify the image is available:
-     ```
-     skopeo inspect docker://quay.io/redhat-services-prod/obsint-processing-tenant/<component>/<component>:latest
-     ```
+   - Follow “Wait for image build” in `/cve-workflow` to verify the full
+     output image reference for the merged revision in Quay.
    - If the image is not available after 20 minutes, wait
      another **20 minutes** and check again
    - If still not available after the second wait (40 minutes total), send the
@@ -433,12 +340,10 @@ fix: resolve {CVE-ID} — {brief description}
 
 ## Constraints
 
-- **User acknowledgment required** — never act on the
-  verdict without the user confirming the assessment.
-  They may know things the codebase analysis cannot reveal.
-- **Jira transitions** — Path A (Not Affected) transitions
-  to Done/Closed only after verifying production image is
-  also not affected (see Path A step 2-3). For Paths B and C,
+- **User acknowledgment** — required before interactive remediation, not for
+  Path A closure with verified production/published image scan evidence.
+- **Jira transitions** — Path A posts the scan evidence and sets Story Points
+  to 1 before moving to Done/Closed. For Paths B and C,
   do NOT close until the applicable production gate is complete:
   app-interface MR for standard components, or Konflux release and
   registry.redhat.io catalog publication for productized rules images
