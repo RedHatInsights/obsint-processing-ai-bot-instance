@@ -321,5 +321,5 @@ Do NOT skip `status: done` on `task_update` — without it the dashboard shows t
 
 - Do NOT transition ticket status
 - Do NOT assign tickets
-- Process at most 10 CVE/backlog tickets per cycle (preflight limits), plus
-  at most 5 Security-label CVE candidates
+- Process at most 10 tickets per cycle — the CVE and Security-label
+  candidate scans share one budget of 10 (enforced by the preflight)
