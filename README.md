@@ -91,6 +91,13 @@ from the deployed or published image in Jira, sets **Story Points** to **1**,
 and moves the issue to **Done** (or the equivalent **Closed** status) without
 waiting for confirmation. A clean `:latest` alone does not qualify.
 
+For native dependency CVEs and published-SBOM/runtime discrepancies, developer-bot
+follows the [native image verification reference](instance/developer-bot/agent/.opencode/skills/resolve-cve/reference/native-image-verification.md).
+It investigates exact base/builder images, checks scanner advisory coverage,
+separates build-only dependencies from runtime copies, and persists evidence and
+blockers across cycles. This is agent workflow guidance; existing verification
+and closure gates still apply.
+
 ## Image and deployment
 
 Both Konflux pipelines in `.tekton/` build the unmodified upstream
