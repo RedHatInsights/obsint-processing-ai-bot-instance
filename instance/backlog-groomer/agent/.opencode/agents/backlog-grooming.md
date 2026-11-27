@@ -48,6 +48,17 @@ rather than assuming app-interface is required.
 **Parsing CVE summaries**: The format is `CVE-YYYY-NNNNN {Component}: {Package}: {Title}`.
 Extract the component (first token after the CVE ID) and look it up in the table below.
 
+**Security-labeled CVE candidates**: Tickets carrying the `Security` or
+`SecurityTracking` Jira label but no CVE ID in the summary are CVE
+candidates. Confirm from the description that the ticket is about a
+vulnerability (CVE ID, vulnerable package/version, advisory link, or a
+security fix request) before labeling — generic security hardening or
+policy work is not a CVE ticket. Determine the component from the
+description (the affected service, repo, image, or package) and use the
+same mapping table below. Confirmed tickets get the same labels, story
+points, sprint, and quarterly fixVersion as CVE tickets so the dev bot can
+pick them up; do not label tickets that are not vulnerability-related.
+
 #### CVE Component to Repo Mapping
 
 This table defines the repository and production update mechanism used for
