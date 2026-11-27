@@ -47,19 +47,21 @@ The data is in your prompt. Do NOT call `jira_search` again.
 **Skip already-assessed backlog tickets**: call `memory_search` with query
 "groomed tickets" to find prior grooming memories. Filter out any ticket
 keys that appear in previous backlog assessments. This filter applies only
-to Step 2, not to the separate `## CVE Grooming` section: those CVEs still
-need Step 1.5 even if they appeared in a previous assessment.
+to Step 2, not to the separate `## CVE Grooming` and
+`## Security Label Grooming` sections: those tickets still
+need Steps 1.5 and 1.6 even if they appeared in a previous assessment.
 
-Exit only if neither new backlog tickets nor CVE grooming tickets remain.
+Exit only if neither new backlog tickets, CVE grooming tickets, nor
+Security-label CVE candidates remain.
 An empty/skipped weekly backlog scan must not skip hourly CVE grooming.
-If both are empty, mark the batch task `done` with `summary`:
+If all are empty, mark the batch task `done` with `summary`:
 "No new tickets to groom", write `data/cycle-sleep.json` with
 `{"recommended_sleep": 3600, "reason": "no_new_tickets"}`, and exit.
 
 ### Step 1.5: CVE Grooming (auto-labeling)
 
 Check if your prompt contains a `## CVE Grooming` section (from the
-`02-cve-scan.py` preflight). If it does NOT exist, skip to Step 2.
+`02-cve-scan.py` preflight). If it does NOT exist, skip to Step 1.6.
 
 **This step is live.** Its CVE labels, story points, and sprint updates are
 authorized independently of the backlog-assessment dry-run in Step 3.
@@ -144,6 +146,88 @@ After processing all CVE tickets, update the batch task:
 `task_update` with `summary`: append CVE grooming results,
 `metadata`: add `cve_grooming` array with per-ticket results.
 
+### Step 1.6: Security-label CVE candidates
+
+Check if your prompt contains a `## Security Label Grooming` section
+(from the `02-cve-scan.py` preflight). If it does NOT exist, skip to Step 2.
+
+These tickets carry the `Security` or `SecurityTracking` Jira label but
+have no CVE ID in the summary, so Step 1.5's CVE-prefixed summary pattern
+does not apply. This step is live like Step 1.5: its Jira
+updates are authorized independently of the dry-run backlog assessment
+in Step 3.
+
+**Skip already-reviewed candidates**: call `memory_search` with query
+"security label reviewed" and filter out ticket keys that already have a
+recorded verdict. This prevents re-reviewing tickets already judged as
+not vulnerability-related every hour.
+
+For each remaining ticket in the section:
+
+1. **Read the description** and decide whether the ticket is about a
+   vulnerability. It is when the description mentions a CVE ID, a
+   security flaw in a dependency or image (package name with
+   vulnerable/fixed versions, CVSS score, NVD/advisory links), or a
+   request to fix/upgrade an affected package. Generic security
+   hardening, access requests, or policy work is NOT a vulnerability
+   ticket — skip it and record the verdict.
+
+2. If it is about a vulnerability, groom it like a CVE ticket:
+   - **Determine the component**. Check in this order:
+     1. **The summary**: these tickets often use the same
+        `{Component}: {Package}: {Title}` pattern as CVE summaries, just
+        without the CVE ID prefix — the component is the first token
+        before the first colon and may contain slashes (e.g. in
+        `lightspeed-services-ocp/ocp-rules-rhel9: rustls-webpki: ...`,
+        the component is `lightspeed-services-ocp/ocp-rules-rhel9`; do
+        not split it on `/` and ignore any trailing `[tag]`).
+     2. **The description**: look for the affected service, repo, image,
+        or package (e.g. `aggregator`, `notification-writer`).
+     3. **Existing `repo:` labels** on the ticket (shown in the
+        preflight's `repos:` line).
+     Match the component case-insensitively against the "CVE Component
+     to Repo Mapping" table in your native `backlog-grooming` agent
+     instructions; cross-reference `project-repos.json` as in Step 1.5.
+     If no component can be identified or matched, do NOT add the bot
+     label — flag it for manual mapping instead.
+   - **Assign labels** exactly like Step 1.5 steps 3–4:
+     `obsint-processing-ai`, `repo:<matched-repo-name>`, plus
+     `repo:app-interface` only when the table row requires it.
+     Only ADD labels; never remove existing ones.
+   - **Set the quarterly fixVersion** (current `YYYYQ[1-4]`, e.g.
+     `2026Q3`) via `jira_update_issue` when the ticket has no
+     `YYYYQ[1-4]` fixVersion yet — unlike Step 1.5, the preflight does
+     NOT pre-assign a quarter for these candidates. Preserve existing
+     fixVersions; never overwrite an already-planned quarter.
+   - **Set story points and sprint** following Step 1.5 steps 5–6.
+
+3. Record every decision (confirmed or skipped) in the same
+   `task_update` metadata `cve_grooming` array as Step 1.5, adding
+   `"source": "security-label"` and `"vulnerability_confirmed"`
+   to each entry:
+
+   ```
+   {"key": "CCXDEV-XXXXX", "source": "security-label",
+    "component": "notification-writer", "vulnerability_confirmed": true,
+    "labels_added": ["obsint-processing-ai", "repo:ccx-notification-writer", "repo:app-interface"],
+    "story_points_set": true, "sprint_added": "CCXDEV Sprint 173",
+    "match_confidence": "high"}
+   ```
+
+   Append a summary line per ticket:
+   ```
+   Security: CCXDEV-XXXXX (notification-writer) → vulnerability confirmed → +labels +3sp +sprint
+   Security: CCXDEV-XXXXX → not vulnerability-related — skipped
+   ```
+
+4. After processing all candidates, store the verdicts with
+   `memory_store`, content: "Security label reviewed on YYYY-MM-DD:
+   CCXDEV-111 (confirmed), CCXDEV-222 (not vulnerability), ..." and
+   tags: `["cve-grooming", "security-reviewed"]`. Future cycles use
+   this memory to skip re-review. Confirmed tickets also stop
+   reappearing in the scan once the `obsint-processing-ai` label is
+   added.
+
 ### Step 2: Assess each ticket
 
 Use the team context in your native `backlog-grooming` agent instructions,
@@ -174,7 +258,8 @@ If an error occurs, call `task_update` with `paused_reason`: "<what went wrong>"
 
 **Backlog assessment is in DRY-RUN.** Do not post assessment comments or add
 `ai-groomed` labels. This restriction applies only to Step 3; the live CVE
-updates in Step 1.5 still run, even when no backlog tickets need assessment.
+updates in Steps 1.5 and 1.6 still run, even when no backlog tickets need
+assessment.
 
 Build a `results` list with one entry per ticket:
 
@@ -236,4 +321,5 @@ Do NOT skip `status: done` on `task_update` — without it the dashboard shows t
 
 - Do NOT transition ticket status
 - Do NOT assign tickets
-- Process at most 10 tickets per cycle
+- Process at most 10 tickets per cycle — the CVE and Security-label
+  candidate scans share one budget of 10 (enforced by the preflight)
