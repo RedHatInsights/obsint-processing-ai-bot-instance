@@ -152,8 +152,8 @@ Check if your prompt contains a `## Security Label Grooming` section
 (from the `02-cve-scan.py` preflight). If it does NOT exist, skip to Step 2.
 
 These tickets carry the `Security` or `SecurityTracking` Jira label but
-have no CVE ID in the summary, so Step 1.5's summary-based component
-extraction does not apply. This step is live like Step 1.5: its Jira
+have no CVE ID in the summary, so Step 1.5's CVE-prefixed summary pattern
+does not apply. This step is live like Step 1.5: its Jira
 updates are authorized independently of the dry-run backlog assessment
 in Step 3.
 
@@ -173,11 +173,20 @@ For each remaining ticket in the section:
    ticket — skip it and record the verdict.
 
 2. If it is about a vulnerability, groom it like a CVE ticket:
-   - **Determine the component** from the description — look for the
-     affected service, repo, image, or package (e.g. `aggregator`,
-     `notification-writer`, `lightspeed-services-ocp/ocp-rules-rhel9`).
-     Match it case-insensitively against the "CVE Component to Repo
-     Mapping" table in your native `backlog-grooming` agent
+   - **Determine the component**. Check in this order:
+     1. **The summary**: these tickets often use the same
+        `{Component}: {Package}: {Title}` pattern as CVE summaries, just
+        without the CVE ID prefix — the component is the first token
+        before the first colon and may contain slashes (e.g. in
+        `lightspeed-services-ocp/ocp-rules-rhel9: rustls-webpki: ...`,
+        the component is `lightspeed-services-ocp/ocp-rules-rhel9`; do
+        not split it on `/` and ignore any trailing `[tag]`).
+     2. **The description**: look for the affected service, repo, image,
+        or package (e.g. `aggregator`, `notification-writer`).
+     3. **Existing `repo:` labels** on the ticket (shown in the
+        preflight's `repos:` line).
+     Match the component case-insensitively against the "CVE Component
+     to Repo Mapping" table in your native `backlog-grooming` agent
      instructions; cross-reference `project-repos.json` as in Step 1.5.
      If no component can be identified or matched, do NOT add the bot
      label — flag it for manual mapping instead.

@@ -54,10 +54,13 @@ candidates. Confirm from the description that the ticket is about a
 vulnerability (CVE ID, vulnerable package/version, advisory link, or a
 security fix request) before labeling — generic security hardening or
 policy work is not a CVE ticket. Determine the component from the
-description (the affected service, repo, image, or package) and use the
-same mapping table below. Confirmed tickets get the same labels, story
-points, sprint, and quarterly fixVersion as CVE tickets so the dev bot can
-pick them up; do not label tickets that are not vulnerability-related.
+summary first (same `{Component}: {Package}: {Title}` pattern as CVE
+summaries, without the CVE ID prefix — e.g.
+`lightspeed-services-ocp/ocp-rules-rhel9: rustls-webpki: ...`), then
+the description, then existing `repo:` labels, and use the same mapping
+table below. Confirmed tickets get the same labels, story points,
+sprint, and quarterly fixVersion as CVE tickets so the dev bot can pick
+them up; do not label tickets that are not vulnerability-related.
 
 #### CVE Component to Repo Mapping
 
