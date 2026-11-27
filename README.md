@@ -91,6 +91,9 @@ from the deployed or published image in Jira, sets **Story Points** to **1**,
 and moves the issue to **Done** (or the equivalent **Closed** status) without
 waiting for confirmation. A clean `:latest` alone does not qualify.
 
+The [native image verification guide](instance/developer-bot/agent/.opencode/skills/resolve-cve/reference/native-image-verification.md)
+covers base-image scans, embedded dependencies and evidence reuse across cycles.
+
 ## Image and deployment
 
 Both Konflux pipelines in `.tekton/` build the unmodified upstream

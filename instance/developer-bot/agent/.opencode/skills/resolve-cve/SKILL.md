@@ -153,6 +153,10 @@ For `registry.redhat.io` images, load @reference/redhat-registry-proxy.md and
 use its Skopeo-to-OCI workflow before scanning with Syft. Direct Syft registry
 access does not use the team proxy mapping.
 
+For embedded native dependencies, incomplete scanner coverage or SBOM/runtime
+discrepancies, follow @reference/native-image-verification.md before escalating.
+Existing verification and closure rules still apply.
+
 ## Step 3: Present Assessment
 
 Present the finding to the user clearly:
